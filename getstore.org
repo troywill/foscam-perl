@@ -1,74 +1,191 @@
-* TODO make mpeg video from jpegs program [ foscam-jpeg-to-mpg.pl ]
-** Main
-#+begin_src perl :tangle /usr/local/bin/tdw/foscam-jpeg-to-mpg.pl :shebang #!/usr/bin/env perl :noweb yes
-my $directory = $ARGV[0] or die "Please supply a directory";
-use Cwd;
-my $working_dir = getcwd;
-chdir $directory or die "Unable to change to $directory";
-my $mpeg_video_filename = build_video_filename();
-print "DEBUG: $mpeg_video_filename\n";
-system("ffmpeg -f image2 -i frame_%05d.jpg $mpeg_video_filename");
-chdir $working_dir or die "Unable to chdir to $working_dir";
-<<build-video-filename-subroutine>>
-#+end_src  
-** build_video_filename subroutine
-#+name: build-video-filename-subroutine
-#+begin_src perl
-  sub build_video_filename {
-      # /home/troy/video/cam/12/11/19/9/cam1
-      # /home/troy/video/cam/12/11/19/9/camtroy/JPG_
-      my $asf_dir = getcwd;
-      $asf_dir =~ /\/(\d+)\/(\d+)\/(\d+)\/(\d+)\/(.*?)\/(.*?)$/;
-      my ( $year, $month, $day, $hour, $camera_name ) = ( $1, $2, $3, $4, $5 );
-      return "/tmp/$year.$month.$day.$hour.$camera_name.mpg";
+* TODO Last 5 minutes upload
+#+BEGIN_SRC perl :tangle /usr/local/bin/tdw/foscam-last-5-minutes-upload.pl :shebang #!/usr/bin/env perl :noweb yes
+<<pragma-chunk>>
+<<read-config-chunk>>
+<<get-options-chunk>>
+#+END_SRC  
+** TODO chdir current dir
+
+* TODO MOM 							   :noexport:
+** Make links
+#+BEGIN_SRC perl :tangle /usr/local/bin/tdw/foscam-make-links.pl :shebang #!/usr/bin/env perl :noweb yes
+  <<pragma-stub>>
+  use warnings;
+  use strict;
+  my $counter = 1;
+  my $scounter = '';
+  
+  every_minute();
+  make_webm();
+  
+  sub make_webm {
+      chdir("links") or die "Unable to chdir to links dir";
+      system("ffmpeg -y -i %04d.png -codec:v libvpx -quality good -cpu-used 0 -b:v 500k -qmin 10 -qmax 42 -maxrate 500k -bufsize 1000k -threads 4 -vf scale=-1:480 -an -pass 1 -f webm /dev/null");
+  
+      system("ffmpeg -i %04d.png -codec:v libvpx -quality good -cpu-used 0 -b:v 500k -qmin 10 -qmax 42 -maxrate 500k -bufsize 1000k -threads 4 -vf scale=-1:480 -codec:a libvorbis -b:a 128k -pass 2 -f webm output.webm");
   }
-#+end_src
-**  http://ffmpeg.org/faq.html
-#+begin_src sh
-ffmpeg -f image2 -i img%d.jpg /tmp/a.mpg
-#+end_src    
-* The foscam-getstore-asf.pl program
-  foscam-getstore-asf.pl cam1 cam1
-** The main routine (foscam-getstore-asf.pl)
-#+begin_src perl :tangle /usr/local/bin/tdw/foscam-getstore-asf.pl :shebang #!/usr/bin/env perl :noweb yes
-my $camera_name = $ARGV[0];
-my $ip_address = $ARGV[1];
-use LWP::Simple;
-my $url = "http://admin:\@$ip_address/videostream.asf";
-$url = "http://admin:\@$ip_address/videostream.asf";
-my $file = build_filename($camera_name);
-my $logfile = "log.$camera_name";
-print "DEBUG: opening $logfile\n";
-open($log, ">", $logfile) or die "Unable to open $logfile: $!";
-print $log "$$:$file\n";
-close $log;
-my $return = getstore($url,$file);
-<<build-filename-subroutine>>
+  
+  sub every_minute {
+      $counter = 1;
+      for my $min (0..59) {
+          $min = sprintf("%02d", $min);
+          my $sec = '00';
+          $scounter = sprintf("%04d", $counter);
+          chdir("links") or die "Unable to chdir to links dir";
+          my $png = "../${min}${sec}.png";
+          if ( -e $png ) {
+              symlink($png, "$scounter.png");
+              $counter++;
+          } else {
+              print "$png does not exist\n";
+          }
+          chdir("..") or die "Unable to chdir ..";
+      }
+  }
+  
+  sub every_ten_seconds {
+      for my $min (0..59) {
+          $min = sprintf("%02d", $min);
+          for my $sec (0..5) {
+              $sec = sprintf("%02d", $sec*10);
+              $scounter = sprintf("%04d", $counter);
+              chdir("links") or die "Unable to chdir to links dir";
+              my $png = "../${min}${sec}.png";
+              if ( -e $png ) {
+                  symlink($png, "$scounter.png");
+              } else {
+                  print "$png does not exist\n";
+              }
+              chdir("..") or die "Unable to chdir ..";
+              $counter++;
+          }
+      }
+  }
+  
+#+END_SRC
+* jpg-to-ppm-to-webm
+#+BEGIN_SRC perl :tangle /usr/local/bin/tdw/foscam-jpg-to-ppm-to-webm :shebang #!/usr/bin/env perl :noweb yes
+    <<pragma-chunk>>
+    my $time_segment = $ARGV[0];
+    my $image=Image::Magick->new;
+    
+    my @jpegs = <*.jpg>;
+    my $i = 0;
+    
+    mkdir("png");
+    jpg_to_png();
+    chdir("png") or die "Unable to chdir";
+    system("ffmpeg -r 1 -i %04d.png webm.webm");
+    #system("ffmpeg -r 1 -i %05d.png ogv.ogv");
+    #system("ffmpeg -r 1 -i %05d.ppm avi.avi");
+    #system("ffmpeg -r 1 -i %05d.ppm mkv.mkv");
+    #system("ffmpeg -r 1 -i %05d.ppm mp4.mp4")
+    
+    sub jpg_to_png {
+        foreach my $jpeg ( @jpegs ) {
+            $jpeg =~ /^(\d\d)(\d\d).jpg$/;
+            my ( $min, $sec ) = ( $1, $2 );
+            if ( ($min >= $time_segment) && ($min < $time_segment+5) ) {
+                print "[$min][$sec]\n";
+                my $j = $image->Read( $jpeg );
+                   my $counter = sprintf("%04d", $i);
+  
+                   my $text = "$min:$sec";
+                   $image->Annotate(x => 50, y => 50, font=>'kai.ttf', pointsize=>10, fill=>'green', text=>$text);
+  #              $j = $image->Write("png/${min}${sec}.png");
+                $j = $image->Write("png/$counter.png");
+                @$image = ();
+                $i++;
+            }
+        }
+    }
+#+END_SRC
+* Overview
+The foscam-perl project is free software. This web page documents Perl programs I've written to get the video from a Foscam camera. foscam-getstore-asf.pl and foscam-daemon.pl are fully functional alpha quality programs. You can copy and paste them from this page since. You can rsync the foscam-perl project with rsync -av foscam-perl.shilohsystem.com::foscam-pel. This project
+* The foscam-getstore-snapshot.pl program
+** Usage
+#+BEGIN_EXAMPLE
+foscam-getstore-snapshot.pl "camera_name" "ip_address"
+#+END_EXAMPLE
+where camera_name is an arbitrary name you give a Foscam camera and ip_addess naturally 
+** What foscam-getstore-snapshot.pl does
+** The main routine (foscam-getstore-snapshot.pl)
+#+begin_src perl :tangle /usr/local/bin/tdw/foscam-getstore-snapshot.pl :shebang #!/usr/bin/env perl :noweb yes
+  <<pragma-chunk>>
+  use Time::HiRes qw( usleep ualarm gettimeofday tv_interval nanosleep
+                        clock_gettime clock_getres clock_nanosleep clock
+                        stat );
+
+# get seconds and microseconds since the epoch
+  my ($s0, $usec0) = gettimeofday();
+  my ($s1, $usec1) = gettimeofday();
+  
+  my $t0;
+  my $t1;
+
+  
+  my $image = Image::Magick->new;
+  <<read-config-chunk>>
+      <<get-options-chunk>>
+      my $index = '00';
+
+
+  $interval = 0.60;
+
+  my $start_time = time;
+  my $url = "http://admin:\@$ip_address/snapshot.cgi";
+  $url = "http://admin:\@$ip_address/snapshot.cgi";
+  my $file = build_jpeg_filename($camera_name, $BASE_DIR);
+  my $logfile = "$BASE_DIR/log.$camera_name";
+  open(my $log, ">", $logfile) or die "Unable to open $logfile: $!";
+  while ( time < ($start_time + $duration) ) {
+      ($s0, $usec0) = gettimeofday();
+      print $log "Start at ", $s0 + $usec0/1_000_000, "\n";
+      my ( $file, $text ) = build_jpeg_filename($camera_name, $BASE_DIR);
+      ($s0, $usec0) = gettimeofday();
+      my $jpeg = get($url);
+      ($s1, $usec1) = gettimeofday();
+      my $fetch_time = ( $s1 + $usec1/1_000_000 ) - ( $s0 + $usec0/1_000_000 );
+      my $j = $image->BlobToImage($jpeg);
+      $image->Annotate(x => 5, y => 20, font=>'kai.ttf', pointsize=>20, fill=>'gold', text=>$text);
+      #              $j = $image->Write("png/${min}${sec}.png");                                                                                
+      $j = $image->Write($file);
+      @$image = ();
+      ($s1, $usec1) = gettimeofday();
+      $interval = 1 - $usec1/1_000_000;
+      Time::HiRes::sleep ($interval);
+  }    
+  <<build-jpeg-filename-subroutine>>
 #+end_src  
-** The build_filename subroutine
-#+name: build-filename-subroutine
+** The build_jpeg_filename subroutine
+#+name: build-jpeg-filename-subroutine
 #+begin_src perl
-  sub build_filename {
-      my $camera_name = shift;
+  sub build_jpeg_filename {
+      my ( $camera_name, $BASE_DIR ) = @_;
       my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) =
           localtime(time);
       $year -= 100;
       $mon += 1;
-      my $directory = "$year/$mon/$mday/$hour/$camera_name";
+      $hour = sprintf("%02d", $hour);
+      $min = sprintf("%02d", $min);
+      $sec = sprintf("%02d", $sec);
+
+      my $directory = "$BASE_DIR/$year/$mon/$mday/$camera_name/$hour";
       use File::Path qw(make_path);
-      make_path($directory, { verbose => 1 });
-      my $file = "$year/$mon/$mday/$hour/$camera_name/$year.$mon.$mday.$hour.$min.$camera_name.asf";
-      return $file;
+      if ( ! -e $directory ) {
+        make_path($directory, { verbose => 1 });
+      }
+#      my $file = "$directory/${min}${sec}.jpg";
+      my $file = "$directory/${min}${sec}.png";
+      my $text = "$min:$sec";
+      return ($file, $text);
   }
 #+end_src
-* foscam-daemon.pl for 1, 5, 30, or 60 minutes ( foscam-daemon.pl )
+* foscam-daemon.pl for 1, 5, 30, or 60 minutes ( foscam-daemon.pl ) 
 ** The main program  
 #+begin_src perl :tangle /usr/local/bin/tdw/foscam-daemon.pl :shebang #!/usr/bin/env perl :noweb yes
-  use warnings;
-  use strict;
-  use Getopt::Long;
-  my $interval;
-  GetOptions( "interval=i" => \$interval );
+  <<pragma-chunk>>
+  <<get-options-chunk>>
   my $camera_name = $ARGV[0];
   my $camera_ip_address = $ARGV[1];
   my $command = "foscam-getstore-asf.pl $camera_name $camera_ip_address \&";
@@ -116,8 +233,147 @@ my $return = getstore($url,$file);
   }
   
 #+end_src
+* The foscam-getstore-asf.pl program
+** Usage
+#+BEGIN_EXAMPLE
+foscam-getstore-asf.pl "camera_name" "ip_address"
+#+END_EXAMPLE
+where camera_name is an arbitrary name you give a Foscam camera and ip_addess naturally 
+** What foscam-getstore-asf.pl does
+** The main routine (foscam-getstore-asf.pl)
+#+begin_src perl :tangle /usr/local/bin/tdw/foscam-getstore-asf.pl :shebang #!/usr/bin/env perl :noweb yes
+my $camera_name = $ARGV[0];
+my $ip_address = $ARGV[1];
+use LWP::Simple;
+my $url = "http://admin:\@$ip_address/videostream.asf";
+$url = "http://admin:\@$ip_address/videostream.asf";
+my $file = build_filename($camera_name);
+my $logfile = "log.$camera_name";
+print "DEBUG: opening $logfile\n";
+open($log, ">", $logfile) or die "Unable to open $logfile: $!";
+print $log "$$:$file\n";
+close $log;
+my $return = getstore($url,$file);
+<<build-filename-subroutine>>
+#+end_src  
+** The build_filename subroutine
+#+name: build-filename-subroutine
+#+begin_src perl
+  sub build_filename {
+      my ( $camera_name, $base_dir )  = @_;
+      my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) =
+          localtime(time);
+      $year -= 100;
+      $mon += 1;
+      my $directory = "$year/$mon/$mday/$hour/$camera_name";
+      use File::Path qw(make_path);
+      make_path($directory, { verbose => 1 });
+      my $file = "$year/$mon/$mday/$hour/$camera_name/$year.$mon.$mday.$hour.$min.$camera_name.asf";
+      return $file;
+  }
+#+end_src
+* Library
+** foscam.conf
+#+BEGIN_SRC sh :tangle foscam.conf :padline no
+# set storage directory
+STORAGE_DIRECTORY = /var/camera
+# Camera 1
+CAM1_NAME = cam1
+CAM1_STATUS = inactive
+CAM1_IP_ADDRESS = 192.168.1.X
+CAM1_USER = admin
+CAM1_PASSWORD = 
 
-* Emit jpegs from the asf ( asf-to-jpeg.pl )
+# Camera 2
+CAM2_NAME = cam2
+CAM2_STATUS = active
+CAM2_IP_ADDRESS = 192.168.1.120
+CAM2_USER = admin
+CAM2_PASSWORD = 
+
+#+END_SRC
+** pragma-chunk
+#+NAME: pragma-chunk
+#+BEGIN_SRC perl
+use warnings;
+use strict;
+use LWP::Simple;
+use Image::Magick;
+use Getopt::Long;
+#+END_SRC
+** read-config-chunk
+#+NAME: read-config-chunk
+#+BEGIN_SRC perl
+### BEGIN CONFIGURATION SECTION
+my $config_file = $ENV{HOME} . '/.foscam.conf';
+my $BASE_DIR = "/var/camera";
+
+my %User_Preferences;
+open(CONFIG, "<", $config_file) or die "Unable to read config file $config_file: $!";
+while (<CONFIG>) {
+    chomp;                  # no newline
+    s/#.*//;                # no comments
+    s/^\s+//;               # no leading white
+    s/\s+$//;               # no trailing white
+    next unless length;     # anything left?
+    my ($var, $value) = split(/\s*=\s*/, $_, 2);
+    $User_Preferences{$var} = $value;
+}
+### END CONFIGURATION SECTION
+#+END_SRC
+** get-options-chunk
+#+NAME: get-options-chunk
+#+BEGIN_SRC perl
+  ### BEGIN GET OPTIONS SECTION
+  my $interval = 1;
+  my $duration = 3600;
+  my $camera_name = 'CAM2';
+  my $ip_address = '192.168.1.20';
+  GetOptions( "interval=i" => \$interval,
+              "duration=i" => \$duration,
+              "camera=s" => \$camera_name,
+              "ip-address=s" => \$ip_address);
+  ### END GET OPTIONS SECTION
+#+END_SRC   
+** Testing :noexport:
+#+BEGIN_SRC sh :tangle testing/foscam.conf :padline no
+# set storage directory
+STORAGE_DIRECTORY = /var/camera
+#+END_SRC
+#+BEGIN_SRC perl :tangle testing/foo.pl :shebang #!/usr/bin/env perl :noweb yes
+<<read-config-chunk>>
+#+END_SRC   
+* make mpeg video from jpegs program [ foscam-jpeg-to-mpg.pl ] 	   :noexport:
+** Main
+#+begin_src perl :tangle /usr/local/bin/tdw/foscam-jpeg-to-mpg.pl :shebang #!/usr/bin/env perl :noweb yes
+my $directory = $ARGV[0] or die "Please supply a directory";
+use Cwd;
+my $working_dir = getcwd;
+chdir $directory or die "Unable to change to $directory";
+my $mpeg_video_filename = build_video_filename();
+print "DEBUG: $mpeg_video_filename\n";
+system("ffmpeg -f image2 -i frame_%05d.jpg $mpeg_video_filename");
+chdir $working_dir or die "Unable to chdir to $working_dir";
+<<build-video-filename-subroutine>>
+#+end_src  
+** build_video_filename subroutine
+#+name: build-video-filename-subroutine
+#+begin_src perl
+  sub build_video_filename {
+      # /home/troy/video/cam/12/11/19/9/cam1
+      # /home/troy/video/cam/12/11/19/9/camtroy/JPG_
+      my $asf_dir = getcwd;
+      $asf_dir =~ /\/(\d+)\/(\d+)\/(\d+)\/(\d+)\/(.*?)\/(.*?)$/;
+      my ( $year, $month, $day, $hour, $camera_name ) = ( $1, $2, $3, $4, $5 );
+      return "/tmp/$year.$month.$day.$hour.$camera_name.mpg";
+  }
+#+end_src
+**  http://ffmpeg.org/faq.html
+#+begin_src sh
+ffmpeg -f image2 -i img%d.jpg /tmp/a.mpg
+#+end_src    
+
+* Emit jpegs from the asf ( asf-to-jpeg.pl )  :noexport:
 ** Main program  
 #+begin_src perl :tangle /usr/local/bin/tdw/asf-to-jpeg.pl :shebang #!/usr/bin/env perl :noweb yes
 my $asf = $ARGV[0] or die;
@@ -169,15 +425,48 @@ sub make_jpeg_directory {
 }
 #+end_src   
 
-* Make AVI from Jpegs
+* Emit ppms from the asf ( asf-to-ppm.pl ) 			   :noexport:
+** Main program  
+#+begin_src perl :tangle /usr/local/bin/tdw/asf-to-ppm.pl :shebang #!/usr/bin/env perl :noweb yes
+my $asf = $ARGV[0] or die;
+use Cwd;
+my $working_dir = getcwd;
+my $ppm_dir = make_ppm_directory($asf);
+my $time = time;
+system("ffmpeg -i $asf -bsf:v mjpeg2jpeg $ppm_dir/%05d.ppm");
+print "Made ppms in ", time - $time, " seconds.\n";
+<<make-ppm-directory-subroutine>>
+#+end_src
+** Make mpg
+#+name: make-mpg
+#+begin_src perl
+chdir($jpeg_dir) or die "Unable to chdir to $jpeg_dir: $!";
+system("ffmpeg -r 5 -f image2 -i frame_%05d.jpg $jpeg_dir.mpg");
+system("mv $jpeg_dir.avi ..");
+chdir $working_dir or die "Unable to chdir to $working_dir: $!";
+#+end_src
+** Make a directory in which to store the ppms
+#+name: make-ppm-directory-subroutine
+#+begin_src perl
+sub make_ppm_directory {
+  my $asf = shift;
+  $asf =~ /(\d+)\.asf/;
+  my $dir = "PPM_$1";
+  return $dir if -e $dir;
+  mkdir $dir or die "Unable to make $dir dir: $!";
+  return $dir;
+}
+#+end_src   
+
+* Make AVI from Jpegs  :noexport:
    
    ffmpeg -i frame_%d.jpg -c:v copy foscam.avi
 
-* The wget program
+* The wget program  :noexport:
 #+begin_src sh
 wget http://admin:@camtroy/videostream.asf
 #+end_src
-* Demo programs
+* Demo programs  :noexport:
 ** Figure out how long to sleep
 #+begin_src perl :tangle sleep-until-hour.pl :shebang #!/usr/bin/env perl :noweb yes
   use warnings;
@@ -197,10 +486,26 @@ wget http://admin:@camtroy/videostream.asf
 #  print "I will sleep for $sleep_until seconds\n";
   sleep $one_minute_sleep;
 #+end_src
-* Experiments
+* Experiments  :noexport:
 ** Make pnm files
    Following doesn't work: jpeg images are created
 #+begin_src sh
 ffmpeg -i $asf -c:v copy -bsf:v mjpeg2jpeg $jpeg_dir/frame_%05d.pnm
 #+end_src
-* File naming scheme
+* File naming scheme  :noexport:
+
+#+TITLE:     foscam-perl.shilohystem.com
+#+AUTHOR:    Troy Will
+#+EMAIL:     troydwill@gmail.com
+#+DATE:      2012-11-20 Tue
+#+DESCRIPTION:
+#+KEYWORDS:
+#+LANGUAGE:  en
+#+OPTIONS:   H:3 num:nil toc:t \n:nil @:t ::t |:t ^:{} -:t f:t *:t <:t
+#+OPTIONS:   TeX:t LaTeX:t skip:nil d:nil todo:t pri:nil tags:not-in-toc
+#+INFOJS_OPT: view:nil toc:nil ltoc:t mouse:underline buttons:0 path:http://orgmode.org/org-info.js
+#+EXPORT_SELECT_TAGS: export
+#+EXPORT_EXCLUDE_TAGS: noexport
+#+LINK_UP:   
+#+LINK_HOME: 
+#+XSLT:
