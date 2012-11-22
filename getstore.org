@@ -1,5 +1,5 @@
 * TODO Last 5 minutes upload
-#+BEGIN_SRC perl :tangle /usr/local/bin/tdw/foscam-last-5-minutes-upload.pl :shebang #!/usr/bin/env perl :noweb yes
+#+BEGIN_SRC perl :tangle bin/foscam-last-5-minutes-upload.pl :shebang #!/usr/bin/env perl :noweb yes
 <<pragma-chunk>>
 <<read-config-chunk>>
 <<get-options-chunk>>
@@ -8,7 +8,7 @@
 
 * TODO MOM 							   :noexport:
 ** Make links
-#+BEGIN_SRC perl :tangle /usr/local/bin/tdw/foscam-make-links.pl :shebang #!/usr/bin/env perl :noweb yes
+#+BEGIN_SRC perl :tangle bin/foscam-make-links.pl :shebang #!/usr/bin/env perl :noweb yes
   <<pragma-stub>>
   use warnings;
   use strict;
@@ -64,7 +64,7 @@
   
 #+END_SRC
 * jpg-to-ppm-to-webm
-#+BEGIN_SRC perl :tangle /usr/local/bin/tdw/foscam-jpg-to-ppm-to-webm :shebang #!/usr/bin/env perl :noweb yes
+#+BEGIN_SRC perl :tangle bin/foscam-jpg-to-ppm-to-webm :shebang #!/usr/bin/env perl :noweb yes
     <<pragma-chunk>>
     my $time_segment = $ARGV[0];
     my $image=Image::Magick->new;
@@ -110,7 +110,7 @@ foscam-getstore-snapshot.pl "camera_name" "ip_address"
 where camera_name is an arbitrary name you give a Foscam camera and ip_addess naturally 
 ** What foscam-getstore-snapshot.pl does
 ** The main routine (foscam-getstore-snapshot.pl)
-#+begin_src perl :tangle /usr/local/bin/tdw/foscam-getstore-snapshot.pl :shebang #!/usr/bin/env perl :noweb yes
+#+begin_src perl :tangle bin/foscam-getstore-snapshot.pl :shebang #!/usr/bin/env perl :noweb yes
   <<pragma-chunk>>
   use Time::HiRes qw( usleep ualarm gettimeofday tv_interval nanosleep
                         clock_gettime clock_getres clock_nanosleep clock
@@ -183,7 +183,7 @@ where camera_name is an arbitrary name you give a Foscam camera and ip_addess na
 #+end_src
 * foscam-daemon.pl for 1, 5, 30, or 60 minutes ( foscam-daemon.pl ) 
 ** The main program  
-#+begin_src perl :tangle /usr/local/bin/tdw/foscam-daemon.pl :shebang #!/usr/bin/env perl :noweb yes
+#+begin_src perl :tangle bin/foscam-daemon.pl :shebang #!/usr/bin/env perl :noweb yes
   <<pragma-chunk>>
   <<get-options-chunk>>
   my $camera_name = $ARGV[0];
@@ -241,7 +241,7 @@ foscam-getstore-asf.pl "camera_name" "ip_address"
 where camera_name is an arbitrary name you give a Foscam camera and ip_addess naturally 
 ** What foscam-getstore-asf.pl does
 ** The main routine (foscam-getstore-asf.pl)
-#+begin_src perl :tangle /usr/local/bin/tdw/foscam-getstore-asf.pl :shebang #!/usr/bin/env perl :noweb yes
+#+begin_src perl :tangle bin/foscam-getstore-asf.pl :shebang #!/usr/bin/env perl :noweb yes
 my $camera_name = $ARGV[0];
 my $ip_address = $ARGV[1];
 use LWP::Simple;
@@ -300,6 +300,8 @@ use strict;
 use LWP::Simple;
 use Image::Magick;
 use Getopt::Long;
+use FindBin qw($Bin);
+use lib "$Bin/../lib";
 #+END_SRC
 ** read-config-chunk
 #+NAME: read-config-chunk
@@ -345,7 +347,7 @@ STORAGE_DIRECTORY = /var/camera
 #+END_SRC   
 * make mpeg video from jpegs program [ foscam-jpeg-to-mpg.pl ] 	   :noexport:
 ** Main
-#+begin_src perl :tangle /usr/local/bin/tdw/foscam-jpeg-to-mpg.pl :shebang #!/usr/bin/env perl :noweb yes
+#+begin_src perl :tangle bin/foscam-jpeg-to-mpg.pl :shebang #!/usr/bin/env perl :noweb yes
 my $directory = $ARGV[0] or die "Please supply a directory";
 use Cwd;
 my $working_dir = getcwd;
@@ -375,7 +377,7 @@ ffmpeg -f image2 -i img%d.jpg /tmp/a.mpg
 
 * Emit jpegs from the asf ( asf-to-jpeg.pl )  :noexport:
 ** Main program  
-#+begin_src perl :tangle /usr/local/bin/tdw/asf-to-jpeg.pl :shebang #!/usr/bin/env perl :noweb yes
+#+begin_src perl :tangle bin/asf-to-jpeg.pl :shebang #!/usr/bin/env perl :noweb yes
 my $asf = $ARGV[0] or die;
 use Cwd;
 my $working_dir = getcwd;
@@ -427,7 +429,7 @@ sub make_jpeg_directory {
 
 * Emit ppms from the asf ( asf-to-ppm.pl ) 			   :noexport:
 ** Main program  
-#+begin_src perl :tangle /usr/local/bin/tdw/asf-to-ppm.pl :shebang #!/usr/bin/env perl :noweb yes
+#+begin_src perl :tangle bin/asf-to-ppm.pl :shebang #!/usr/bin/env perl :noweb yes
 my $asf = $ARGV[0] or die;
 use Cwd;
 my $working_dir = getcwd;
