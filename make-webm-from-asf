@@ -1,0 +1,18 @@
+  551  time ffmpeg -i 12.11.22.20.12.cam3.asf 12.ogg
+  553  time ffmpeg -i 12.11.22.20.12.cam3.asf 12.wav
+  561  ffmpeg -i f.wav f.ogg
+  565  ffmpeg -f alsa -ac 1 -i hw:1 -f video4linux2 -i /dev/video0 /tmp/out.mpg
+  566  ffmpeg -f alsa -ac 1 -i hw:0 -f video4linux2 -i /dev/video0 /tmp/out.mpg
+  567  ffmpeg -f alsa -ac 1 -f video4linux2 -i /dev/video0 /tmp/out.mpg
+  571  ffmpeg -f alsa -ac 1 -f video4linux2 -i /dev/video0 /tmp/out.mpg
+  580  ffmpeg -i videostream.asf -c:v libxvid -pass 1 -an -f rawvideo -y /dev/null
+  581  ffmpeg -i videostream.asf -c:v libxvid -pass 2 -an -f rawvideo foo.avi
+  583  ffmpeg -i videostream.asf -c:v libxvid -pass 2 -an foo.webm
+  584  ffmpeg -i videostream.asf -c:v libvpx -pass 2 -an foo.webm
+  585  ffmpeg -i videostream.asf -c:v libvpx -pass 2 -an -f webmin foo.webm
+  586  ffmpeg -i videostream.asf -c:v libvpx -pass 1 -an -f webmin foo.webm
+  587  ffmpeg -i videostream.asf -c:v libvpx -pass 1 -an -f webmin foo.webm
+  588  ffmpeg -i videostream.asf -c:v libvpx -pass 1 -an -f webm foo.webm
+  589  ffmpeg -i videostream.asf -c:v libvpx -pass 2 -an -f webm foo.webm
+  593  history | grep ffm
+  594  history | grep ffm > make-webm-from-asf

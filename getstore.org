@@ -7,24 +7,35 @@
 ** TODO chdir current dir
 
 * TODO MOM 							   :noexport:
-** Make links
+** Make links ( bin/foscam-make-links.pl )
 #+BEGIN_SRC perl :tangle bin/foscam-make-links.pl :shebang #!/usr/bin/env perl :noweb yes
-  <<pragma-stub>>
-  use warnings;
-  use strict;
+  <<pragma-chunk>>
   my $counter = 1;
   my $scounter = '';
-  
-  every_minute();
-  make_webm();
-  
+      
+  every_second();
+  #  every_minute();
+    
+  make_webm('%04d.jpg', '/home/troy/webm.webm');
+      
   sub make_webm {
+      my ( $input, $output ) = @_;
       chdir("links") or die "Unable to chdir to links dir";
-      system("ffmpeg -y -i %04d.png -codec:v libvpx -quality good -cpu-used 0 -b:v 500k -qmin 10 -qmax 42 -maxrate 500k -bufsize 1000k -threads 4 -vf scale=-1:480 -an -pass 1 -f webm /dev/null");
-  
-      system("ffmpeg -i %04d.png -codec:v libvpx -quality good -cpu-used 0 -b:v 500k -qmin 10 -qmax 42 -maxrate 500k -bufsize 1000k -threads 4 -vf scale=-1:480 -codec:a libvorbis -b:a 128k -pass 2 -f webm output.webm");
+      make_two_pass_webm( $input, $output );
+      chdir("..");
   }
-  
+  sub every_second {
+      $counter = 1;
+      my @images = <*.jpg>;
+      mkdir("links");
+      chdir("links") or die "Unable to chdir to links dir";
+      foreach my $image  (@images) {
+          $scounter = sprintf("%04d", $counter);
+          symlink("../$image", "$scounter.jpg") or die "Unable to symlink";
+          $counter++;
+      }
+      chdir("..") or die "Unable to chdir ..";
+  }
   sub every_minute {
       $counter = 1;
       for my $min (0..59) {
@@ -123,25 +134,23 @@ where camera_name is an arbitrary name you give a Foscam camera and ip_addess na
   my $t0;
   my $t1;
 
-  
   my $image = Image::Magick->new;
   <<read-config-chunk>>
-      <<get-options-chunk>>
-      my $index = '00';
-
+  <<get-options-chunk>>
+  my $index = '00';
 
   $interval = 0.60;
 
   my $start_time = time;
   my $url = "http://admin:\@$ip_address/snapshot.cgi";
   $url = "http://admin:\@$ip_address/snapshot.cgi";
-  my $file = build_jpeg_filename($camera_name, $BASE_DIR);
+  my $file = build_image_filename($camera_name, $BASE_DIR, 'jpg' );
   my $logfile = "$BASE_DIR/log.$camera_name";
   open(my $log, ">", $logfile) or die "Unable to open $logfile: $!";
   while ( time < ($start_time + $duration) ) {
       ($s0, $usec0) = gettimeofday();
       print $log "Start at ", $s0 + $usec0/1_000_000, "\n";
-      my ( $file, $text ) = build_jpeg_filename($camera_name, $BASE_DIR);
+      my ( $file, $text ) = build_image_filename($camera_name, $BASE_DIR, 'jpg');
       ($s0, $usec0) = gettimeofday();
       my $jpeg = get($url);
       ($s1, $usec1) = gettimeofday();
@@ -157,30 +166,6 @@ where camera_name is an arbitrary name you give a Foscam camera and ip_addess na
   }    
   <<build-jpeg-filename-subroutine>>
 #+end_src  
-** The build_jpeg_filename subroutine
-#+name: build-jpeg-filename-subroutine
-#+begin_src perl
-  sub build_jpeg_filename {
-      my ( $camera_name, $BASE_DIR ) = @_;
-      my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) =
-          localtime(time);
-      $year -= 100;
-      $mon += 1;
-      $hour = sprintf("%02d", $hour);
-      $min = sprintf("%02d", $min);
-      $sec = sprintf("%02d", $sec);
-
-      my $directory = "$BASE_DIR/$year/$mon/$mday/$camera_name/$hour";
-      use File::Path qw(make_path);
-      if ( ! -e $directory ) {
-        make_path($directory, { verbose => 1 });
-      }
-#      my $file = "$directory/${min}${sec}.jpg";
-      my $file = "$directory/${min}${sec}.png";
-      my $text = "$min:$sec";
-      return ($file, $text);
-  }
-#+end_src
 * foscam-daemon.pl for 1, 5, 30, or 60 minutes ( foscam-daemon.pl ) 
 ** The main program  
 #+begin_src perl :tangle bin/foscam-daemon.pl :shebang #!/usr/bin/env perl :noweb yes
@@ -273,6 +258,62 @@ my $return = getstore($url,$file);
   }
 #+end_src
 * Library
+** foscam-perllib.pm
+#+BEGIN_SRC perl :tangle lib/foscam-perllib.pm :padline no :noweb yes
+<<make-image-dir-subroutine>>
+<<build-image-filename-subroutine>>
+1;
+#+END_SRC  
+*** The make_image_directory subroutine
+#+name: make-image-dir-subroutine
+#+BEGIN_SRC perl
+  sub make_image_dir {
+      my ( $base_dir, $year, $mon, $mday, $camera_name, $hour ) = @_;
+      my $directory = "$base_dir/$year/$mon/$mday/$camera_name/$hour";
+      use File::Path qw(make_path);
+      if ( ! -e $directory ) {
+          make_path($directory, { verbose => 1 }) or die "Unable to mkdir --parent $directory";
+      }
+      return $directory;
+  }
+#+END_SRC    
+*** The build_image_filename subroutine
+#+name: build-image-filename-subroutine
+#+begin_src perl
+  sub build_image_filename {
+      my ( $camera_name, $base_dir, $type ) = @_;
+      my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) =
+          localtime(time);
+      $year -= 100;
+      $mon += 1;
+      $hour = sprintf("%02d", $hour);
+      $min = sprintf("%02d", $min);
+      $sec = sprintf("%02d", $sec);
+    
+      my $directory = make_image_dir( $base_dir, $year, $mon, $mday, $camera_name, $hour );
+    
+      my $file = "$directory/${min}${sec}.$type";
+      my $text = "$min:$sec";
+      return ($file, $text);
+  }
+#+end_src
+
+** ffmpeg-foscamlib.pm
+*** Meaning of ffmpeg options
+    - -y :: Overwrite output files without asking.
+#+BEGIN_SRC perl :tangle lib/ffmpeg-foscamlib.pm :padline no :noweb yes
+  sub make_two_pass_webm {
+      my ( $input, $output ) = @_;
+      my $input = shift;     # %04d.jpg
+      my $quality = 'good';
+      my $video_codec = 'libvpx';
+      # Pass One
+      system("ffmpeg -y -i $input -codec:v $video_codec -quality $quality -cpu-used 0 -b:v 500k -qmin 10 -qmax 42 -maxrate 500k -bufsize 1000k -threads 4 -vf scale=-1:480 -an -pass 1 -f webm /dev/null");
+      # Pass Two
+      system("ffmpeg -y -i $input -codec:v $video_codec -quality $quality -cpu-used 0 -b:v 500k -qmin 10 -qmax 42 -maxrate 500k -bufsize 1000k -threads 4 -vf scale=-1:480 -codec:a libvorbis -b:a 128k -pass 2 -f webm $output");
+  }
+  1;
+#+END_SRC
 ** foscam.conf
 #+BEGIN_SRC sh :tangle foscam.conf :padline no
 # set storage directory
@@ -302,6 +343,8 @@ use Image::Magick;
 use Getopt::Long;
 use FindBin qw($Bin);
 use lib "$Bin/../lib";
+require "foscam-perllib.pm";
+require "ffmpeg-foscamlib.pm";
 #+END_SRC
 ** read-config-chunk
 #+NAME: read-config-chunk
