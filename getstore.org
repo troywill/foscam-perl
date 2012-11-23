@@ -113,15 +113,15 @@
 #+END_SRC
 * Overview
 The foscam-perl project is free software. This web page documents Perl programs I've written to get the video from a Foscam camera. foscam-getstore-asf.pl and foscam-daemon.pl are fully functional alpha quality programs. You can copy and paste them from this page since. You can rsync the foscam-perl project with rsync -av foscam-perl.shilohsystem.com::foscam-pel. This project
-* The foscam-getstore-snapshot.pl program
+* The foscam-perl.pl program
 ** Usage
 #+BEGIN_EXAMPLE
 foscam-getstore-snapshot.pl "camera_name" "ip_address"
 #+END_EXAMPLE
 where camera_name is an arbitrary name you give a Foscam camera and ip_addess naturally 
-** What foscam-getstore-snapshot.pl does
-** The main routine (foscam-getstore-snapshot.pl)
-#+begin_src perl :tangle bin/foscam-getstore-snapshot.pl :shebang #!/usr/bin/env perl :noweb yes
+** What foscam-perl.pl does
+** The main routine (foscam-perl.pl)
+#+begin_src perl :tangle bin/foscam-perl.pl :shebang #!/usr/bin/env perl :noweb yes
   <<pragma-chunk>>
   use Time::HiRes qw( usleep ualarm gettimeofday tv_interval nanosleep
                         clock_gettime clock_getres clock_nanosleep clock
