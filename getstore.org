@@ -9,55 +9,59 @@ where camera_name is an arbitrary name you give a Foscam camera and ip_addess na
 ** What foscam-perl.pl does
 ** The main routine (foscam-perl.pl)
 #+begin_src perl :tangle bin/foscam-perl.pl :shebang #!/usr/bin/env perl :noweb yes
-    <<pragma-chunk>>
-    my $GET = 1;
-    my $ANNOTATE = 0;
-    use Time::HiRes qw( usleep ualarm gettimeofday tv_interval nanosleep
+  <<pragma-chunk>>
+  my $GET = 0;
+  my $GETSTORE = 1;
+  my $ANNOTATE = 0;
+  use Time::HiRes qw( usleep ualarm gettimeofday tv_interval nanosleep
                           clock_gettime clock_getres clock_nanosleep clock
                           stat );
   
   # get seconds and microseconds since the epoch
-    my ($s0, $s1, $usec0, $usec1, $t0, $t1) = 0;
+  my ($s0, $s1, $usec0, $usec1, $t0, $t1) = 0;
   
-    my $image = Image::Magick->new;
-    <<read-config-chunk>>
-    <<get-options-chunk>>
-    my $index = '00';
+  my $image = Image::Magick->new;
+  <<read-config-chunk>>
+  <<get-options-chunk>>
+  my $index = '00';
   
-    $interval = 0.60;
+  $interval = 0.60;
   
-    my $start_time = time;
-    my $url = "http://admin:\@$ip_address/snapshot.cgi";
-    $url = "http://admin:\@$ip_address/snapshot.cgi";
-    my $file = build_image_filename($camera_name, $BASE_DIR, 'jpg' );
-    my $logfile = "$BASE_DIR/log.$camera_name";
-    open(my $log, ">", $logfile) or die "Unable to open $logfile: $!";
-    while ( time < ($start_time + $duration) ) {
-        ($s0, $usec0) = gettimeofday();
-        print $log "Start at ", $s0 + $usec0/1_000_000, "\n";
-        my ( $file, $text ) = build_image_filename($camera_name, $BASE_DIR, 'jpg');
-        ($s0, $usec0) = gettimeofday();
-        if ( $GET ) {
-            my $jpeg = get($url);
-            ($s0, $usec0) = log_time( $log, $s0, $usec0, "retrieved jpeg" );
-            my $j = $image->BlobToImage($jpeg);
-            ($s0, $usec0) = log_time( $log, $s0, $usec0, "\$image->BlobToImage" );
-            if ( $ANNOTATE ) {
-                $image->Annotate(x => 5, y => 20, font=>'kai.ttf', pointsize=>20, fill=>'gold', text=>$text);
-                ($s0, $usec0) = log_time( $log, $s0, $usec0, "\$image->Annotate" );
-            }
-            #              $j = $image->Write("png/${min}${sec}.png");                                                                                
-            $j = $image->Write($file);
-        }
-        my $latest_link = "$BASE_DIR/latest-${camera_name}.jpg";
-        unlink($latest_link);
-        symlink($file, "$latest_link") or die "Unable to symlink";
-        @$image = ();
-        ($s1, $usec1) = gettimeofday();
-        $interval = 1 - $usec1/1_000_000;
-        Time::HiRes::sleep ($interval);
-    }    
-    sub log_time {
+  my $start_time = time;
+  my $url = "http://admin:\@$ip_address/snapshot.cgi";
+  $url = "http://admin:\@$ip_address/snapshot.cgi";
+  my $file = build_image_filename($camera_name, $BASE_DIR, 'jpg' );
+  my $logfile = "$BASE_DIR/log.$camera_name";
+  open(my $log, ">", $logfile) or die "Unable to open $logfile: $!";
+  while ( time < ($start_time + $duration) ) {
+      ($s0, $usec0) = gettimeofday();
+      print $log "--> Start at ", $s0 + $usec0/1_000_000, "\n";
+      my ( $file, $text ) = build_image_filename($camera_name, $BASE_DIR, 'jpg');
+      ($s0, $usec0) = gettimeofday();
+      if ( $GET ) {
+          my $jpeg = get($url);
+          ($s0, $usec0) = log_time( $log, $s0, $usec0, "retrieved jpeg" );
+          my $j = $image->BlobToImage($jpeg);
+          ($s0, $usec0) = log_time( $log, $s0, $usec0, "\$image->BlobToImage" );
+          if ( $ANNOTATE ) {
+              print "DEBUG: \$ANNOTATE = $ANNOTATE\n";
+              $image->Annotate(x => 5, y => 20, font=>'kai.ttf', pointsize=>20, fill=>'gold', text=>$text);
+              ($s0, $usec0) = log_time( $log, $s0, $usec0, "\$image->Annotate" );
+          }
+          $j = $image->Write($file);
+      } elsif ($GETSTORE) {
+          my $jpeg = getstore($url,$file);
+          ($s0, $usec0) = log_time( $log, $s0, $usec0, "getstore retrieved jpeg" );
+      }
+      my $latest_link = "$BASE_DIR/latest-${camera_name}.jpg";
+      unlink($latest_link);
+      symlink($file, "$latest_link") or die "Unable to symlink";
+      @$image = ();
+      ($s1, $usec1) = gettimeofday();
+      $interval = 1 - $usec1/1_000_000;
+      Time::HiRes::sleep ($interval);
+  }
+  sub log_time {
       my ( $filehandle, $s0, $usec0, $text ) = @_;
       my ($s1, $usec1) = gettimeofday();
   #   my $fetch_time =  ( $s1 + $usec1/1_000_000 ) - ( $s0 + $usec0/1_000_000 );
@@ -65,8 +69,8 @@ where camera_name is an arbitrary name you give a Foscam camera and ip_addess na
       my $milliseconds = int($elapsed_time * 1000);
       print $filehandle "$text in $milliseconds ms\n";
       return gettimeofday();
-    }
-    <<build-jpeg-filename-subroutine>>
+  }
+  <<build-jpeg-filename-subroutine>>
   
 #+end_src  
 * Library
