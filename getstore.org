@@ -1,12 +1,289 @@
-* TODO Last 5 minutes upload
+* Overview
+The foscam-perl project is free software. This web page documents Perl programs I've written to get the video from a Foscam camera. foscam-getstore-asf.pl and foscam-daemon.pl are fully functional alpha quality programs. You can copy and paste them from this page since. You can rsync the foscam-perl project with rsync -av foscam-perl.shilohsystem.com::foscam-pel. This project
+* The foscam-perl.pl program
+** Usage
+#+BEGIN_EXAMPLE
+foscam-getstore-snapshot.pl "camera_name" "ip_address"
+#+END_EXAMPLE
+where camera_name is an arbitrary name you give a Foscam camera and ip_addess naturally 
+** What foscam-perl.pl does
+** The main routine (foscam-perl.pl)
+#+begin_src perl :tangle bin/foscam-perl.pl :shebang #!/usr/bin/env perl :noweb yes
+  <<pragma-chunk>>
+  use Time::HiRes qw( usleep ualarm gettimeofday tv_interval nanosleep
+                        clock_gettime clock_getres clock_nanosleep clock
+                        stat );
+
+# get seconds and microseconds since the epoch
+  my ($s0, $usec0) = gettimeofday();
+  my ($s1, $usec1) = gettimeofday();
+  
+  my $t0;
+  my $t1;
+
+  my $image = Image::Magick->new;
+  <<read-config-chunk>>
+  <<get-options-chunk>>
+  my $index = '00';
+
+  $interval = 0.60;
+
+  my $start_time = time;
+  my $url = "http://admin:\@$ip_address/snapshot.cgi";
+  $url = "http://admin:\@$ip_address/snapshot.cgi";
+  my $file = build_image_filename($camera_name, $BASE_DIR, 'jpg' );
+  my $logfile = "$BASE_DIR/log.$camera_name";
+  open(my $log, ">", $logfile) or die "Unable to open $logfile: $!";
+  while ( time < ($start_time + $duration) ) {
+      ($s0, $usec0) = gettimeofday();
+      print $log "Start at ", $s0 + $usec0/1_000_000, "\n";
+      my ( $file, $text ) = build_image_filename($camera_name, $BASE_DIR, 'jpg');
+      ($s0, $usec0) = gettimeofday();
+      my $jpeg = get($url);
+      ($s1, $usec1) = gettimeofday();
+      my $fetch_time = ( $s1 + $usec1/1_000_000 ) - ( $s0 + $usec0/1_000_000 );
+      my $j = $image->BlobToImage($jpeg);
+      $image->Annotate(x => 5, y => 20, font=>'kai.ttf', pointsize=>20, fill=>'gold', text=>$text);
+      #              $j = $image->Write("png/${min}${sec}.png");                                                                                
+      $j = $image->Write($file);
+      my $latest_link = "$BASE_DIR/latest-${camera_name}.jpg";
+      unlink($latest_link);
+      symlink($file, "$latest_link") or die "Unable to symlink";
+      @$image = ();
+      ($s1, $usec1) = gettimeofday();
+      $interval = 1 - $usec1/1_000_000;
+      Time::HiRes::sleep ($interval);
+  }    
+  <<build-jpeg-filename-subroutine>>
+#+end_src  
+* Library
+** foscam-perllib.pm
+#+BEGIN_SRC perl :tangle lib/foscam-perllib.pm :padline no :noweb yes
+<<make-image-dir-subroutine>>
+<<build-image-filename-subroutine>>
+1;
+#+END_SRC  
+*** The make_image_directory subroutine
+#+name: make-image-dir-subroutine
+#+BEGIN_SRC perl
+  sub make_image_dir {
+      my ( $base_dir, $year, $mon, $mday, $camera_name, $hour ) = @_;
+      my $directory = "$base_dir/$year/$mon/$mday/$camera_name/$hour";
+      use File::Path qw(make_path);
+      if ( ! -e $directory ) {
+          make_path($directory, { verbose => 1 }) or die "Unable to mkdir --parent $directory";
+      }
+      return $directory;
+  }
+#+END_SRC    
+*** The build_image_filename subroutine
+#+name: build-image-filename-subroutine
+#+begin_src perl
+  sub build_image_filename {
+      my ( $camera_name, $base_dir, $type ) = @_;
+      my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) =
+          localtime(time);
+      $year -= 100;
+      $mon += 1;
+      $hour = sprintf("%02d", $hour);
+      $min = sprintf("%02d", $min);
+      $sec = sprintf("%02d", $sec);
+
+      my @days = qw(Sun Mon Tue Wed Thu Fri Sat);
+    
+      my $directory = make_image_dir( $base_dir, $year, $mon, $mday, $camera_name, $hour );
+    
+      my $file = "$directory/${min}${sec}.$type";
+      my $text = "$days[$wday] $hour:$min:$sec";
+      return ($file, $text);
+  }
+#+end_src
+
+** ffmpeg-foscamlib.pm
+*** Meaning of ffmpeg options
+    - -y :: Overwrite output files without asking.
+#+BEGIN_SRC perl :tangle lib/ffmpeg-foscamlib.pm :padline no :noweb yes
+  sub make_two_pass_webm {
+      my ( $input, $output ) = @_;
+      my $input = shift;     # %04d.jpg
+      my $quality = 'good';
+      my $video_codec = 'libvpx';
+      # Pass One
+      system("ffmpeg -y -i $input -codec:v $video_codec -quality $quality -cpu-used 0 -b:v 500k -qmin 10 -qmax 42 -maxrate 500k -bufsize 1000k -threads 4 -vf scale=-1:480 -an -pass 1 -f webm /dev/null");
+      # Pass Two
+      system("ffmpeg -y -i $input -codec:v $video_codec -quality $quality -cpu-used 0 -b:v 500k -qmin 10 -qmax 42 -maxrate 500k -bufsize 1000k -threads 4 -vf scale=-1:480 -codec:a libvorbis -b:a 128k -pass 2 -f webm $output");
+  }
+  1;
+#+END_SRC
+* Configuration
+** foscam.conf
+#+BEGIN_SRC fundamental :tangle foscam.conf :padline no
+# General settings
+STORAGE_DIRECTORY = /var/camera
+
+# Camera 1
+CAM1_NAME = cam1
+CAM1_STATUS = active
+CAM1_DESCRIPTION = Top of trailer, south
+CAM1_IP_ADDRESS = 192.168.15.35
+CAM1_USER = admin
+CAM1_PASSWORD =
+
+# Camera 2
+CAM2_NAME = cam2
+CAM2_STATUS = active
+CAM2_DESCRIPTION = Top of trailer
+CAM2_IP_ADDRESS = 192.168.15.157
+CAM2_USER = admin
+CAM2_PASSWORD =
+CAM2_MAC_WIRED = 00:0D:C5:D7:7C:8F
+CAM2_MAC_WIRELESS = 48:02:2A:46:18:47
+
+# Camera 3
+CAM3_NAME = cam3
+CAM3_STATUS = active
+CAM3_DESCRIPTION = Inside trailer, underneath cabinet
+CAM3_IP_ADDRESS = 192.168.1.130
+CAM3_USER = admin
+CAM3_PASSWORD =
+
+# Camera 4
+CAM4_NAME = cam4
+CAM4_STATUS = active
+CAM4_DESCRIPTION = Troy's camera, on picnic table
+CAM4_IP_ADDRESS = 192.168.15.2
+CAM4_USER = admin
+CAM4_PASSWORD =
+#+END_SRC
+*** temp.conf
+#+BEGIN_SRC fundamental
+# General settings
+STORAGE_DIRECTORY = /var/camera
+
+# Camera 1
+CAM1_NAME = cam1
+CAM1_STATUS = inactive
+CAM1_DESCRIPTION =
+CAM1_IP_ADDRESS =
+CAM1_USER = admin
+CAM1_PASSWORD =
+
+# Camera 2
+CAM2_NAME = cam2
+CAM2_STATUS = active
+CAM1_DESCRIPTION = Top of trailer
+CAM2_IP_ADDRESS = 192.168.1.120
+CAM2_USER = admin
+CAM2_PASSWORD =
+
+# Camera 3
+CAM3_NAME = cam3
+CAM3_STATUS = active
+CAM3_DESCRIPTION = Inside trailer, underneath cabinet
+CAM3_IP_ADDRESS = 192.168.1.130
+CAM3_USER = admin
+CAM3_PASSWORD =
+
+# Camera 4 My black FOSCAM
+CAM4_NAME = cam4
+CAM4_STATUS = inactive
+CAM4_DESCRIPTION = Troy's black FOSCAM
+CAM4_IP_ADDRESS =
+CAM4_USER = admin
+CAM4_PASSWORD =
+CAM4_WIRLELESS_MAC =
+CAM4_WIRED_MAC =
+
+#+END_SRC
+* Chunks
+** pragma-chunk
+#+NAME: pragma-chunk
+#+BEGIN_SRC perl
+use warnings;
+use strict;
+use LWP::Simple;
+use Image::Magick;
+use Getopt::Long;
+use FindBin qw($Bin);
+use lib "$Bin/../lib";
+require "foscam-perllib.pm";
+require "ffmpeg-foscamlib.pm";
+#+END_SRC
+** read-config-chunk
+#+NAME: read-config-chunk
+#+BEGIN_SRC perl
+### BEGIN CONFIGURATION SECTION
+my $config_file = $ENV{HOME} . '/.foscam.conf';
+my $BASE_DIR = "/var/camera";
+
+my %User_Preferences;
+open(CONFIG, "<", $config_file) or die "Unable to read config file $config_file: $!";
+while (<CONFIG>) {
+    chomp;                  # no newline
+    s/#.*//;                # no comments
+    s/^\s+//;               # no leading white
+    s/\s+$//;               # no trailing white
+    next unless length;     # anything left?
+    my ($var, $value) = split(/\s*=\s*/, $_, 2);
+    $User_Preferences{$var} = $value;
+}
+### END CONFIGURATION SECTION
+#+END_SRC
+** get-options-chunk
+#+NAME: get-options-chunk
+#+BEGIN_SRC perl
+  ### BEGIN GET OPTIONS SECTION
+  my $interval = 1;
+  my $duration = 3600;
+  my $camera_name = 'CAM2';
+  my $ip_address = '192.168.1.20';
+  GetOptions( "interval=i" => \$interval,
+              "duration=i" => \$duration,
+              "camera=s" => \$camera_name,
+              "ip-address=s" => \$ip_address);
+  ### END GET OPTIONS SECTION
+#+END_SRC   
+** Testing :noexport:
+#+BEGIN_SRC sh :tangle testing/foscam.conf :padline no
+# set storage directory
+STORAGE_DIRECTORY = /var/camera
+#+END_SRC
+#+BEGIN_SRC perl :tangle testing/foo.pl :shebang #!/usr/bin/env perl :noweb yes
+<<read-config-chunk>>
+#+END_SRC   
+* Troy Will :noexport:
+  :PROPERTIES:
+  :ORDERED:  t
+  :END:
+#+BEGIN_SRC sh :tangle ~/bin/troywill.info.sh :shebang #!/bin/bash
+#!/bin/bash
+
+export SSH_AUTH_SOCK="/tmp/ssh-ELCsfQ9RmTSO/agent.548"
+
+RSYNC=/usr/bin/rsync 
+SSH=/usr/bin/ssh 
+KEY=/home/troy/.ssh/id_rsa
+RUSER=troy
+RHOST=shilohsystem.com
+RPATH=/var/www/html/troywill.info
+LPATH=/var/camera
+LFILES="index.html latest-cam1.jpg latest-cam2.jpg latest-cam3.jpg latest-cam4.jpg"
+
+cd $LPATH
+$RSYNC --archive --progress --copy-links -e "$SSH -i $KEY" $LFILES $RUSER@$RHOST:$RPATH
+#+END_SRC   
+# SSH_AUTH_SOCK="/tmp/ssh-ELCsfQ9RmTSO/agent.548"
+* * * * * $HOME/bin/troywill.info.sh >> $HOME/tmp/out 2>&1
+#+BEGIN_SRC sh
+#+END_SRC
+* TODO Last 5 minutes upload :noexport:
 #+BEGIN_SRC perl :tangle bin/foscam-last-5-minutes-upload.pl :shebang #!/usr/bin/env perl :noweb yes
 <<pragma-chunk>>
 <<read-config-chunk>>
 <<get-options-chunk>>
 #+END_SRC  
 ** TODO chdir current dir
-
-* TODO MOM 							   :noexport:
+* TODO MOM :noexport:
 ** Make links ( bin/foscam-make-links.pl )
 #+BEGIN_SRC perl :tangle bin/foscam-make-links.pl :shebang #!/usr/bin/env perl :noweb yes
   <<pragma-chunk>>
@@ -74,7 +351,7 @@
   }
   
 #+END_SRC
-* jpg-to-ppm-to-webm
+* jpg-to-ppm-to-webm :noexport:
 #+BEGIN_SRC perl :tangle bin/foscam-jpg-to-ppm-to-webm :shebang #!/usr/bin/env perl :noweb yes
     <<pragma-chunk>>
     my $time_segment = $ARGV[0];
@@ -111,62 +388,7 @@
         }
     }
 #+END_SRC
-* Overview
-The foscam-perl project is free software. This web page documents Perl programs I've written to get the video from a Foscam camera. foscam-getstore-asf.pl and foscam-daemon.pl are fully functional alpha quality programs. You can copy and paste them from this page since. You can rsync the foscam-perl project with rsync -av foscam-perl.shilohsystem.com::foscam-pel. This project
-* The foscam-perl.pl program
-** Usage
-#+BEGIN_EXAMPLE
-foscam-getstore-snapshot.pl "camera_name" "ip_address"
-#+END_EXAMPLE
-where camera_name is an arbitrary name you give a Foscam camera and ip_addess naturally 
-** What foscam-perl.pl does
-** The main routine (foscam-perl.pl)
-#+begin_src perl :tangle bin/foscam-perl.pl :shebang #!/usr/bin/env perl :noweb yes
-  <<pragma-chunk>>
-  use Time::HiRes qw( usleep ualarm gettimeofday tv_interval nanosleep
-                        clock_gettime clock_getres clock_nanosleep clock
-                        stat );
-
-# get seconds and microseconds since the epoch
-  my ($s0, $usec0) = gettimeofday();
-  my ($s1, $usec1) = gettimeofday();
-  
-  my $t0;
-  my $t1;
-
-  my $image = Image::Magick->new;
-  <<read-config-chunk>>
-  <<get-options-chunk>>
-  my $index = '00';
-
-  $interval = 0.60;
-
-  my $start_time = time;
-  my $url = "http://admin:\@$ip_address/snapshot.cgi";
-  $url = "http://admin:\@$ip_address/snapshot.cgi";
-  my $file = build_image_filename($camera_name, $BASE_DIR, 'jpg' );
-  my $logfile = "$BASE_DIR/log.$camera_name";
-  open(my $log, ">", $logfile) or die "Unable to open $logfile: $!";
-  while ( time < ($start_time + $duration) ) {
-      ($s0, $usec0) = gettimeofday();
-      print $log "Start at ", $s0 + $usec0/1_000_000, "\n";
-      my ( $file, $text ) = build_image_filename($camera_name, $BASE_DIR, 'jpg');
-      ($s0, $usec0) = gettimeofday();
-      my $jpeg = get($url);
-      ($s1, $usec1) = gettimeofday();
-      my $fetch_time = ( $s1 + $usec1/1_000_000 ) - ( $s0 + $usec0/1_000_000 );
-      my $j = $image->BlobToImage($jpeg);
-      $image->Annotate(x => 5, y => 20, font=>'kai.ttf', pointsize=>20, fill=>'gold', text=>$text);
-      #              $j = $image->Write("png/${min}${sec}.png");                                                                                
-      $j = $image->Write($file);
-      @$image = ();
-      ($s1, $usec1) = gettimeofday();
-      $interval = 1 - $usec1/1_000_000;
-      Time::HiRes::sleep ($interval);
-  }    
-  <<build-jpeg-filename-subroutine>>
-#+end_src  
-* foscam-daemon.pl for 1, 5, 30, or 60 minutes ( foscam-daemon.pl ) 
+* foscam-daemon.pl ( foscam-daemon.pl ) :noexport:
 ** The main program  
 #+begin_src perl :tangle bin/foscam-daemon.pl :shebang #!/usr/bin/env perl :noweb yes
   <<pragma-chunk>>
@@ -218,7 +440,7 @@ where camera_name is an arbitrary name you give a Foscam camera and ip_addess na
   }
   
 #+end_src
-* The foscam-getstore-asf.pl program
+* The foscam-getstore-asf.pl program :noexport:
 ** Usage
 #+BEGIN_EXAMPLE
 foscam-getstore-asf.pl "camera_name" "ip_address"
@@ -257,137 +479,6 @@ my $return = getstore($url,$file);
       return $file;
   }
 #+end_src
-* Library
-** foscam-perllib.pm
-#+BEGIN_SRC perl :tangle lib/foscam-perllib.pm :padline no :noweb yes
-<<make-image-dir-subroutine>>
-<<build-image-filename-subroutine>>
-1;
-#+END_SRC  
-*** The make_image_directory subroutine
-#+name: make-image-dir-subroutine
-#+BEGIN_SRC perl
-  sub make_image_dir {
-      my ( $base_dir, $year, $mon, $mday, $camera_name, $hour ) = @_;
-      my $directory = "$base_dir/$year/$mon/$mday/$camera_name/$hour";
-      use File::Path qw(make_path);
-      if ( ! -e $directory ) {
-          make_path($directory, { verbose => 1 }) or die "Unable to mkdir --parent $directory";
-      }
-      return $directory;
-  }
-#+END_SRC    
-*** The build_image_filename subroutine
-#+name: build-image-filename-subroutine
-#+begin_src perl
-  sub build_image_filename {
-      my ( $camera_name, $base_dir, $type ) = @_;
-      my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) =
-          localtime(time);
-      $year -= 100;
-      $mon += 1;
-      $hour = sprintf("%02d", $hour);
-      $min = sprintf("%02d", $min);
-      $sec = sprintf("%02d", $sec);
-    
-      my $directory = make_image_dir( $base_dir, $year, $mon, $mday, $camera_name, $hour );
-    
-      my $file = "$directory/${min}${sec}.$type";
-      my $text = "$min:$sec";
-      return ($file, $text);
-  }
-#+end_src
-
-** ffmpeg-foscamlib.pm
-*** Meaning of ffmpeg options
-    - -y :: Overwrite output files without asking.
-#+BEGIN_SRC perl :tangle lib/ffmpeg-foscamlib.pm :padline no :noweb yes
-  sub make_two_pass_webm {
-      my ( $input, $output ) = @_;
-      my $input = shift;     # %04d.jpg
-      my $quality = 'good';
-      my $video_codec = 'libvpx';
-      # Pass One
-      system("ffmpeg -y -i $input -codec:v $video_codec -quality $quality -cpu-used 0 -b:v 500k -qmin 10 -qmax 42 -maxrate 500k -bufsize 1000k -threads 4 -vf scale=-1:480 -an -pass 1 -f webm /dev/null");
-      # Pass Two
-      system("ffmpeg -y -i $input -codec:v $video_codec -quality $quality -cpu-used 0 -b:v 500k -qmin 10 -qmax 42 -maxrate 500k -bufsize 1000k -threads 4 -vf scale=-1:480 -codec:a libvorbis -b:a 128k -pass 2 -f webm $output");
-  }
-  1;
-#+END_SRC
-** foscam.conf
-#+BEGIN_SRC sh :tangle foscam.conf :padline no
-# set storage directory
-STORAGE_DIRECTORY = /var/camera
-# Camera 1
-CAM1_NAME = cam1
-CAM1_STATUS = inactive
-CAM1_IP_ADDRESS = 192.168.1.X
-CAM1_USER = admin
-CAM1_PASSWORD = 
-
-# Camera 2
-CAM2_NAME = cam2
-CAM2_STATUS = active
-CAM2_IP_ADDRESS = 192.168.1.120
-CAM2_USER = admin
-CAM2_PASSWORD = 
-
-#+END_SRC
-** pragma-chunk
-#+NAME: pragma-chunk
-#+BEGIN_SRC perl
-use warnings;
-use strict;
-use LWP::Simple;
-use Image::Magick;
-use Getopt::Long;
-use FindBin qw($Bin);
-use lib "$Bin/../lib";
-require "foscam-perllib.pm";
-require "ffmpeg-foscamlib.pm";
-#+END_SRC
-** read-config-chunk
-#+NAME: read-config-chunk
-#+BEGIN_SRC perl
-### BEGIN CONFIGURATION SECTION
-my $config_file = $ENV{HOME} . '/.foscam.conf';
-my $BASE_DIR = "/var/camera";
-
-my %User_Preferences;
-open(CONFIG, "<", $config_file) or die "Unable to read config file $config_file: $!";
-while (<CONFIG>) {
-    chomp;                  # no newline
-    s/#.*//;                # no comments
-    s/^\s+//;               # no leading white
-    s/\s+$//;               # no trailing white
-    next unless length;     # anything left?
-    my ($var, $value) = split(/\s*=\s*/, $_, 2);
-    $User_Preferences{$var} = $value;
-}
-### END CONFIGURATION SECTION
-#+END_SRC
-** get-options-chunk
-#+NAME: get-options-chunk
-#+BEGIN_SRC perl
-  ### BEGIN GET OPTIONS SECTION
-  my $interval = 1;
-  my $duration = 3600;
-  my $camera_name = 'CAM2';
-  my $ip_address = '192.168.1.20';
-  GetOptions( "interval=i" => \$interval,
-              "duration=i" => \$duration,
-              "camera=s" => \$camera_name,
-              "ip-address=s" => \$ip_address);
-  ### END GET OPTIONS SECTION
-#+END_SRC   
-** Testing :noexport:
-#+BEGIN_SRC sh :tangle testing/foscam.conf :padline no
-# set storage directory
-STORAGE_DIRECTORY = /var/camera
-#+END_SRC
-#+BEGIN_SRC perl :tangle testing/foo.pl :shebang #!/usr/bin/env perl :noweb yes
-<<read-config-chunk>>
-#+END_SRC   
 * make mpeg video from jpegs program [ foscam-jpeg-to-mpg.pl ] 	   :noexport:
 ** Main
 #+begin_src perl :tangle bin/foscam-jpeg-to-mpg.pl :shebang #!/usr/bin/env perl :noweb yes
@@ -418,7 +509,7 @@ chdir $working_dir or die "Unable to chdir to $working_dir";
 ffmpeg -f image2 -i img%d.jpg /tmp/a.mpg
 #+end_src    
 
-* Emit jpegs from the asf ( asf-to-jpeg.pl )  :noexport:
+* Emit jpegs from the asf ( asf-to-jpeg.pl ) :noexport:
 ** Main program  
 #+begin_src perl :tangle bin/asf-to-jpeg.pl :shebang #!/usr/bin/env perl :noweb yes
 my $asf = $ARGV[0] or die;
@@ -470,7 +561,7 @@ sub make_jpeg_directory {
 }
 #+end_src   
 
-* Emit ppms from the asf ( asf-to-ppm.pl ) 			   :noexport:
+* Emit ppms from the asf ( asf-to-ppm.pl ) :noexport:
 ** Main program  
 #+begin_src perl :tangle bin/asf-to-ppm.pl :shebang #!/usr/bin/env perl :noweb yes
 my $asf = $ARGV[0] or die;
