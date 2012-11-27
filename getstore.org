@@ -4,7 +4,7 @@
   <<read-config-chunk>>
   <<get-options-chunk>>
   use File::Basename;
-  my $upload_stack_file = "/var/camera/log/cam2.upload";
+  my $upload_stack_file = "/var/camera/log/$camera_name.upload";
   while ( my( $asf, $convert_status, $upload_status ) = pop_upload_stack($upload_stack_file)) {
     print "POPPED [$asf] from stack\n";
     make_and_upload_webm($asf);
@@ -289,7 +289,7 @@ sub get_filename_from_path {
       
       my @days = qw(Sun Mon Tue Wed Thu Fri Sat);
       my $formated_time = "$year-$mon-$mday $hour:$min:$sec";
-      return($formated_time, $year, $mon, $mday, $hour, $min, $sec);
+      return($formated_time);
   }
   
 #+END_SRC    
@@ -353,26 +353,26 @@ Input #0, asf, from '3000.asf':
 [buffer @ 0x94997a0] Unable to parse option value "-1" as pixel format
 #+END_EXAMPLE      
 ** foscam-conversion.pm
-#+BEGIN_SRC perl :tangle lib/foscam-conversion.pm :padline no :noweb ye  sub pop_upload_stack {
-    use warnings;
-    use strict;
-    sub pop_upload_stack {
-        my $upload_stack_file = shift;
-        my $temp_upload_file = "tmp_upload";
-        open( my $upload, "<", $upload_stack_file ) or die "Unable to open $upload_stack_file for input: $!";
-        my $popline = <$upload>;
-        open( my $tmp_upload, ">", $temp_upload_file ) or die "Unable to open $temp_upload_file for output: $!";
-        while ( my $line = <$upload> ) {
-            print $tmp_upload $line;
-        }
-        close $tmp_upload;
-        close $upload;
-        rename($temp_upload_file,$upload_stack_file) or die "Unable to rename $temp_upload_file to $upload_stack_file: $!";
-        $popline =~ /\[(.*?)\]\[(.*?)\]\[(.*?)\]/;
-        my ($asf, $convert_status, $upload_status ) = ($1, $2, $3);
-        return ( $asf, $convert_status, $upload_status );
-    }
-    1;
+#+BEGIN_SRC perl :tangle lib/foscam-conversion.pm :padline no :noweb yes
+  use warnings;
+  use strict;
+  sub pop_upload_stack {
+      my $upload_stack_file = shift;
+      my $temp_upload_file = "tmp_upload";
+      open( my $upload, "<", $upload_stack_file ) or die "Unable to open $upload_stack_file for input: $!";
+      my $popline = <$upload>;
+      open( my $tmp_upload, ">", $temp_upload_file ) or die "Unable to open $temp_upload_file for output: $!";
+      while ( my $line = <$upload> ) {
+          print $tmp_upload $line;
+      }
+      close $tmp_upload;
+      close $upload;
+      rename($temp_upload_file,$upload_stack_file) or die "Unable to rename $temp_upload_file to $upload_stack_file: $!";
+      $popline =~ /\[(.*?)\]\[(.*?)\]\[(.*?)\]/;
+      my ($asf, $convert_status, $upload_status ) = ($1, $2, $3);
+      return ( $asf, $convert_status, $upload_status );
+  }
+  1;
 #+END_SRC   
 * Configuration
 ** foscam.conf
@@ -460,7 +460,6 @@ CAM4_WIRED_MAC =
 #+BEGIN_SRC perl
 use warnings;
 use strict;
-use DateTime;
 use LWP::Simple;
 use Image::Magick;
 use Getopt::Long;
