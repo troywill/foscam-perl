@@ -1,8 +1,13 @@
 * TODO foscam-status.pl
 #+BEGIN_SRC perl :tangle bin/foscam-status.pl :shebang #!/usr/bin/env perl :noweb yes
-<<pragma-chunk>>
-<<read-config-chunk>>
-<<get-options-chunk>>
+  <<pragma-chunk>>
+  $|++;
+  <<read-config-chunk>>
+  <<get-options-chunk>>
+
+  use Net::Ping;
+  ping_cameras(\%User_Preferences);
+  
 #+END_SRC
   
 * TODO foscam-convert-manager.pl
@@ -384,6 +389,28 @@ Input #0, asf, from '3000.asf':
 #+BEGIN_SRC perl :tangle lib/foscam-status.pm :padline no :noweb yes
   use warnings;
   use strict;
+  
+  sub do_ping {
+      my ($p,$host) = @_;
+      print "$host: ";
+      if ($p->ping($host)) {
+          print "responded.\n";
+      } else {
+          print "did not respond.\n";
+      }
+  }
+      
+  sub ping_cameras {
+      my ($User_Preferences) = @_;
+      my $p = Net::Ping->new();
+      print "$User_Preferences->{'CAM1_NAME'} => "; do_ping($p,$User_Preferences->{'CAM1_IP_ADDRESS'});
+      print "$User_Preferences->{'CAM2_NAME'} => "; do_ping($p,$User_Preferences->{'CAM2_IP_ADDRESS'});
+      print "$User_Preferences->{'CAM3_NAME'} => "; do_ping($p,$User_Preferences->{'CAM3_IP_ADDRESS'});
+      print "$User_Preferences->{'CAM4_NAME'} => "; do_ping($p,$User_Preferences->{'CAM4_IP_ADDRESS'});
+      $p->close();
+  }
+  
+  1;
 #+END_SRC
 * Configuration
 ** foscam.conf
@@ -393,8 +420,8 @@ Input #0, asf, from '3000.asf':
   
   # Camera 1
   CAM1_NAME = cam1
-  CAM1_STATUS = active
-  CAM1_DESCRIPTION = Top of trailer, south
+  CAM1_STATUS = inactive
+  CAM1_DESCRIPTION = Bedroom, unplugged
   CAM1_IP_ADDRESS = 192.168.15.35
   CAM1_USER = admin
   CAM1_PASSWORD =
@@ -402,8 +429,8 @@ Input #0, asf, from '3000.asf':
   # Camera 2
   CAM2_NAME = cam2
   CAM2_STATUS = active
-  CAM2_DESCRIPTION = Top of trailer
-  CAM2_IP_ADDRESS = 192.168.15.157
+  CAM2_DESCRIPTION = Top of trailer facing north
+  CAM2_IP_ADDRESS = 192.168.15.20
   CAM2_USER = admin
   CAM2_PASSWORD =
   CAM2_MAC_WIRED = 00:0D:C5:D7:7C:8F
@@ -412,8 +439,8 @@ Input #0, asf, from '3000.asf':
   # Camera 3
   CAM3_NAME = cam3
   CAM3_STATUS = active
-  CAM3_DESCRIPTION = Inside trailer, underneath cabinet
-  CAM3_IP_ADDRESS = 192.168.1.130
+  CAM3_DESCRIPTION = Inside trailer, near kitchen underneath cabinet
+  CAM3_IP_ADDRESS = 192.168.1.30
   CAM3_USER = admin
   CAM3_PASSWORD =
   
