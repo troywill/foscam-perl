@@ -1,9 +1,15 @@
+* TODO foscam-status.pl
+#+BEGIN_SRC perl :tangle bin/foscam-status.pl :shebang #!/usr/bin/env perl :noweb yes
+<<pragma-chunk>>
+<<read-config-chunk>>
+<<get-options-chunk>>
+#+END_SRC
+  
 * TODO foscam-convert-manager.pl
 #+BEGIN_SRC perl :tangle bin/foscam-convert-manager.pl :shebang #!/usr/bin/env perl :noweb yes
   <<pragma-chunk>>
   <<read-config-chunk>>
   <<get-options-chunk>>
-  use File::Basename;
   my $upload_stack_file = "/var/camera/log/$camera_name.upload";
   while ( my( $asf, $convert_status, $upload_status ) = pop_upload_stack($upload_stack_file)) {
     print "POPPED [$asf] from stack\n";
@@ -374,6 +380,11 @@ Input #0, asf, from '3000.asf':
   }
   1;
 #+END_SRC   
+** foscam-status.pm
+#+BEGIN_SRC perl :tangle lib/foscam-status.pm :padline no :noweb yes
+  use warnings;
+  use strict;
+#+END_SRC
 * Configuration
 ** foscam.conf
   #+BEGIN_SRC fundamental :tangle foscam.conf :padline no
@@ -464,10 +475,12 @@ use LWP::Simple;
 use Image::Magick;
 use Getopt::Long;
 use FindBin qw($Bin);
+use File::Basename;
 use lib "$Bin/../lib";
 require "foscam-perllib.pm";
 require "ffmpeg-foscamlib.pm";
 require "foscam-conversion.pm";
+require "foscam-status.pm";
 #+END_SRC
 ** read-config-chunk
 #+NAME: read-config-chunk
