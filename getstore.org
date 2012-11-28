@@ -1,4 +1,4 @@
-* TODO foscam-status.pl
+* foscam-status.pl
 #+BEGIN_SRC perl :tangle bin/foscam-status.pl :shebang #!/usr/bin/env perl :noweb yes
   <<pragma-chunk>>
   $|++;
@@ -7,10 +7,16 @@
 
   use Net::Ping;
   ping_cameras(\%User_Preferences);
+  my $result = getstore("http://admin:\@cam1/snapshot.cgi", "/tmp/cam1.jpg");
+  $result = getstore("http://admin:\@cam2/snapshot.cgi", "/tmp/cam2.jpg");
+  $result = getstore("http://admin:\@cam3/snapshot.cgi", "/tmp/cam3.jpg");
+  $result = getstore("http://admin:\@cam4/snapshot.cgi", "/tmp/cam4.jpg");
+  system("chromium /tmp/index.html &");
+
   
 #+END_SRC
   
-* TODO foscam-convert-manager.pl
+* foscam-convert-manager.pl
 #+BEGIN_SRC perl :tangle bin/foscam-convert-manager.pl :shebang #!/usr/bin/env perl :noweb yes
   <<pragma-chunk>>
   <<read-config-chunk>>
@@ -33,7 +39,7 @@
     rename("webm.webm",$filename);
   }
 #+END_SRC
-* TODO foscam-daemon.pl ( foscam-daemon.pl ) 			   :noexport:
+* foscam-daemon.pl ( foscam-daemon.pl ) 			   :noexport:
 #+BEGIN_EXAMPLE
 foscam-daemon.pl --camera cam1 --ip-address cam1 --duration seconds
 #+END_EXAMPLE  
@@ -63,7 +69,7 @@ foscam-daemon.pl --camera cam1 --ip-address cam1 --duration seconds
       sleep sleep_until_interval($interval);
   }
 #+end_src
-* TODO The foscam-getstore-asf.pl program 			   :noexport:
+* The foscam-getstore-asf.pl program 				   :noexport:
 ** Usage
 #+BEGIN_EXAMPLE
 foscam-getstore-asf.pl "camera_name" "ip_address"
@@ -84,7 +90,7 @@ print "[foscam-getstore-asf.pl PID $$]\n";
 close $pid;
 my $return = getstore($url,$file);
 #+end_src  
-* TODO foscam-asf-to-webm.pl
+* foscam-asf-to-webm.pl
 #+BEGIN_SRC perl :tangle bin/foscam-asf-to-webm.pl :shebang #!/usr/bin/env perl :noweb yes
 <<pragma-chunk>>
 <<read-config-chunk>>
@@ -93,7 +99,7 @@ make_two_pass_webm_from_asf($ARGV[0], $ARGV[1]);
 #+END_SRC  
 * Overview
 The foscam-perl project is free software. This web page documents Perl programs I've written to get the video from a Foscam camera. foscam-getstore-asf.pl and foscam-daemon.pl are fully functional alpha quality programs. You can copy and paste them from this page since. You can rsync the foscam-perl project with rsync -av foscam-perl.shilohsystem.com::foscam-pel. This project
-* The foscam-perl.pl program
+* TODO The foscam-perl.pl program
 ** Usage
 #+BEGIN_EXAMPLE
 foscam-getstore-snapshot.pl --camera cam1 --ip-address 192.168.15.36
@@ -103,9 +109,11 @@ where camera_name is an arbitrary name you give a Foscam camera and ip_addess na
 ** The main routine (foscam-perl.pl)
 #+begin_src perl :tangle bin/foscam-perl.pl :shebang #!/usr/bin/env perl :noweb yes
   <<pragma-chunk>>
-  my $GET = 0;
-  my $GETSTORE = 1;
-  my $ANNOTATE = 0;
+  <<read-config-chunk>>
+  <<get-options-chunk>>
+  my $GET = 1;
+  my $GETSTORE = 0;
+  my $ANNOTATE = 1;
   use Time::HiRes qw( usleep ualarm gettimeofday tv_interval nanosleep
                           clock_gettime clock_getres clock_nanosleep clock
                           stat );
@@ -114,8 +122,6 @@ where camera_name is an arbitrary name you give a Foscam camera and ip_addess na
   my ($s0, $s1, $usec0, $usec1, $t0, $t1) = 0;
   
   my $image = Image::Magick->new;
-  <<read-config-chunk>>
-  <<get-options-chunk>>
   my $index = '00';
   
   $interval = 0.60;
@@ -151,7 +157,8 @@ where camera_name is an arbitrary name you give a Foscam camera and ip_addess na
       symlink($file, "$latest_link") or die "Unable to symlink";
       @$image = ();
       ($s1, $usec1) = gettimeofday();
-      $interval = 1 - $usec1/1_000_000;
+      # $interval = 1 - $usec1/1_000_000;
+      $interval = sleep_until_interval(1); 
       Time::HiRes::sleep ($interval);
   }
   sub log_time {
@@ -262,23 +269,29 @@ sub get_filename_from_path {
 #+name: sleep-until-interval-subroutine
 #+begin_src perl
   sub sleep_until_interval {
-      my $interval_minutes = shift;
-      print "DEBUG: repeat every [$interval_minutes] minutes\n";
+      my $repeat_interval = shift;
       my $sleep_until_interval = 0;
+      print "DEBUG: repeat every [$repeat_interval] seconds\n";
       my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) =
           localtime(time);
       $year -= 100;
       $mon += 1;
       
       my $seconds_past_hour = $min * 60 + $sec;
-      $sleep_until_interval = $seconds_past_hour%($interval_minutes*60);
+      print "SLEEP UNTIL: seconds_past_hour: $seconds_past_hour\n";
       
-      $sleep_until_interval = ($interval_minutes*60) - $sleep_until_interval;
+      my $modulus = $seconds_past_hour%($repeat_interval);
+
+      print "modulus of $seconds_past_hour and $repeat_interval: $modulus\n";
+      my $sleep_until_interval = $repeat_interval - $modulus;
+      print " $repeat_interval - $modulus = $sleep_until_interval\n";
+
+
       
-      # if ( $interval_minutes == 1 ) {
-      #     $sleep_until_interval = $seconds_past_hour%$interval_minutes;
+      # if ( $repeat_interval == 1 ) {
+      #     $sleep_until_interval = $seconds_past_hour%$repeat_interval;
       #     $sleep_until_interval = 60 - $sleep_until_interval;
-      # } elsif ( $interval_minutes == 60 ) {
+      # } elsif ( $repeat_interval == 60 ) {
       #     # ONE HOUR
       #     $sleep_until_interval = 3600 - $seconds_past_hour;
       # }
@@ -420,12 +433,14 @@ Input #0, asf, from '3000.asf':
   
   # Camera 1
   CAM1_NAME = cam1
-  CAM1_STATUS = inactive
-  CAM1_DESCRIPTION = Bedroom, unplugged
-  CAM1_IP_ADDRESS = 192.168.15.35
+  CAM1_STATUS = active
+  CAM1_DESCRIPTION = Desk
+  CAM1_IP_ADDRESS = 192.168.15.10
   CAM1_USER = admin
   CAM1_PASSWORD =
-  
+  CAM1_MAC_WIRED = 00:0D:C5:D7:55:15
+  CAM1_MAC_WIRELESS = 48:02:2A:43:AF:01
+
   # Camera 2
   CAM2_NAME = cam2
   CAM2_STATUS = active
