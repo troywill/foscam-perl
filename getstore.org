@@ -84,7 +84,7 @@ system("vlc 'http://admin:\@cam4/videostream.cgi' &");
   <<read-config-chunk>>
   <<get-options-chunk>>
   my $upload_stack_file = $UPLOADFILE;
-  while ( my $asf = pop_upload_stack($upload_stack_file)) {
+  while ( my $asf = pop_stack_file($upload_stack_file)) {
     if ( -e $asf ) {
       my $webm = make_webm($asf, $BASE_DIR);
       if (defined($webm) ){
@@ -104,7 +104,7 @@ system("vlc 'http://admin:\@cam4/videostream.cgi' &");
   <<read-config-chunk>>
   <<get-options-chunk>>
   my $rsync_stack_file = $RSYNCFILE;
-  while ( my $asf = pop_upload_stack($upload_stack_file)) {
+  while ( my $asf = pop_stack_file($upload_stack_file)) {
     if ( -e $asf ) {
       my $webm = make_webm($asf, $BASE_DIR);
       if (defined($webm) ){
@@ -447,7 +447,7 @@ Input #0, asf, from '3000.asf':
 #+BEGIN_SRC perl :tangle lib/foscam-conversion.pm :padline no :noweb yes
   use warnings;
   use strict;
-  sub pop_upload_stack {
+  sub pop_stack_file {
       my $upload_stack_file = shift;
       my $temp_upload_file = "tmp_upload";
       my $popline = 0;
