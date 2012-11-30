@@ -1,3 +1,60 @@
+* foscam-record.pl ( foscam-record.pl )
+#+BEGIN_EXAMPLE
+foscam-record.pl --camera cam1 --ip-address cam1 --duration seconds
+#+END_EXAMPLE  
+** The main program  
+#+begin_src perl :tangle bin/foscam-record.pl :shebang #!/usr/bin/env perl :noweb yes
+  <<pragma-chunk>>
+  <<read-config-chunk>>
+  <<get-options-chunk>>
+  mkdir("$BASE_DIR/run");
+  mkdir("$BASE_DIR/log");
+    
+  my $url = "http://admin:\@$ip_address/videostream.asf";
+  $url = "http://admin:\@$ip_address/videostream.asf";
+  
+  my $file = build_video_filename($camera_name, $BASE_DIR, 'asf' );
+  while ( my $alarm = sleep_until_interval($interval) ) {
+      eval {
+          local $SIG{ALRM} = sub {
+              open ( my $upload_file, ">>", $UPLOADFILE ) or die "Unable to open $UPLOADFILE: $!\n";
+              print $upload_file "$file\n";
+              close $upload_file;
+              die;
+          };
+          alarm $alarm;
+          $file = build_video_filename($camera_name, $BASE_DIR, 'asf' );
+          print "=> getstore videostream.asf to $file\n";
+          my $return = getstore($url,$file);
+          alarm 0;
+      };
+  }
+  
+  print "Now, we can do stuff\n";
+#+end_src
+
+* Alarm Service Settings
+| Setting                   | Value |
+|---------------------------+-------|
+| Motion Detect Armed       | On    |
+| Motion Detect Sensibility | 10    |
+| Motion Compensation       | Off   |
+| Send Mail on Alarm        | On    |
+| Upload Image on Alarm     | Off   |
+| Scheduler                 | On    | 
+** Links
+1. http://www.e-foscam.com/blog/archives/453
+2. http://blog.sensr.net/2012/02/29/tuning-foscam-fi8910w-ftp-settings/
+
+* HTML
+#+BEGIN_EXAMPLE
+<video src="movie.webm" poster="movie.jpg" controls>
+        This is fallback content to display if the browser
+        does not support the video element.
+</video>
+#+END_EXAMPLE
+* TODO Upload 5 minute videos from each camera
+1. [ ] upload cam1 each 5 minutes
 * foscam-status.pl
 #+BEGIN_SRC perl :tangle bin/foscam-status.pl :shebang #!/usr/bin/env perl :noweb yes
   <<pragma-chunk>>
@@ -13,7 +70,12 @@
   $result = getstore("http://admin:\@cam4/snapshot.cgi", "/tmp/cam4.jpg");
   system("chromium /tmp/index.html &");
 
-  
+
+system("vlc 'http://admin:\@cam1/videostream.cgi' &");
+system("vlc 'http://admin:\@cam2/videostream.cgi' &");
+system("vlc 'http://admin:\@cam3/videostream.cgi' &");
+system("vlc 'http://admin:\@cam4/videostream.cgi' &");
+
 #+END_SRC
   
 * foscam-convert-manager.pl
@@ -21,25 +83,42 @@
   <<pragma-chunk>>
   <<read-config-chunk>>
   <<get-options-chunk>>
-  my $upload_stack_file = "/var/camera/log/$camera_name.upload";
-  while ( my( $asf, $convert_status, $upload_status ) = pop_upload_stack($upload_stack_file)) {
-    print "POPPED [$asf] from stack\n";
-    make_and_upload_webm($asf);
-  }
-  
-  sub make_and_upload_webm {
-    my ($asf) = @_;
-    my ($name,$path,$suffix) = fileparse($asf,".asf");
-    print "[ name = $name ] [ path = $path ] [ suffix = $suffix ]\n";
-    my $filename = get_filename_from_path($asf, $BASE_DIR);
-    $filename = '/var/camera/upload/' . $filename . '.webm';
-    chdir($path) or die "Unable to chdir to asf directory: $!";
-    make_two_pass_webm_from_asf( "${name}${suffix}", $BASE_DIR );
-    print "MOVE webm.webm $filename\n";
-    rename("webm.webm",$filename);
+  my $upload_stack_file = $UPLOADFILE;
+  while ( my $asf = pop_upload_stack($upload_stack_file)) {
+    if ( -e $asf ) {
+      my $webm = make_webm($asf, $BASE_DIR);
+      if (defined($webm) ){
+        print "[RSYNC MANAGER: $webm]\n";
+        open( my $rsync, ">>", $RSYNCFILE ) or warn "unable to open $RSYNCFILE for appending: $!";
+        print $rsync "$webm\n";
+      }
+    } else {
+      warn "$asf does not exist\n";
+      sleep 5;
+    }
   }
 #+END_SRC
-* foscam-daemon.pl ( foscam-daemon.pl ) 			   :noexport:
+* foscam-rsync-manager.pl
+#+BEGIN_SRC perl :tangle bin/foscam-rsync-manager.pl :shebang #!/usr/bin/env perl :noweb yes
+  <<pragma-chunk>>
+  <<read-config-chunk>>
+  <<get-options-chunk>>
+  my $rsync_stack_file = $RSYNCFILE;
+  while ( my $asf = pop_upload_stack($upload_stack_file)) {
+    if ( -e $asf ) {
+      my $webm = make_webm($asf, $BASE_DIR);
+      if (defined($webm) ){
+        print "[RSYNC MANAGER: $webm]\n";
+        open( my $rsync, ">>", $RSYNCFILE ) or warn "unable to open $RSYNCFILE for appending: $!";
+        print $rsync "$webm\n";
+      }
+    } else {
+      warn "$asf does not exist\n";
+      sleep 5;
+    }
+  }
+#+END_SRC
+* TODO foscam-daemon.pl ( foscam-daemon.pl ) 			   :noexport:
 #+BEGIN_EXAMPLE
 foscam-daemon.pl --camera cam1 --ip-address cam1 --duration seconds
 #+END_EXAMPLE  
@@ -95,7 +174,7 @@ my $return = getstore($url,$file);
 <<pragma-chunk>>
 <<read-config-chunk>>
 <<get-options-chunk>>
-make_two_pass_webm_from_asf($ARGV[0], $ARGV[1]);
+make_two_pass_webm($ARGV[0], $ARGV[1]);
 #+END_SRC  
 * Overview
 The foscam-perl project is free software. This web page documents Perl programs I've written to get the video from a Foscam camera. foscam-getstore-asf.pl and foscam-daemon.pl are fully functional alpha quality programs. You can copy and paste them from this page since. You can rsync the foscam-perl project with rsync -av foscam-perl.shilohsystem.com::foscam-pel. This project
@@ -111,6 +190,7 @@ where camera_name is an arbitrary name you give a Foscam camera and ip_addess na
   <<pragma-chunk>>
   <<read-config-chunk>>
   <<get-options-chunk>>
+  print "I2: $interval\n";
   my $GET = 1;
   my $GETSTORE = 0;
   my $ANNOTATE = 1;
@@ -118,13 +198,12 @@ where camera_name is an arbitrary name you give a Foscam camera and ip_addess na
                           clock_gettime clock_getres clock_nanosleep clock
                           stat );
   
-  # get seconds and microseconds since the epoch
+
+# get seconds and microseconds since the epoch
   my ($s0, $s1, $usec0, $usec1, $t0, $t1) = 0;
   
   my $image = Image::Magick->new;
   my $index = '00';
-  
-  $interval = 0.60;
   
   my $start_time = time;
   my $url = "http://admin:\@$ip_address/snapshot.cgi";
@@ -158,8 +237,8 @@ where camera_name is an arbitrary name you give a Foscam camera and ip_addess na
       @$image = ();
       ($s1, $usec1) = gettimeofday();
       # $interval = 1 - $usec1/1_000_000;
-      $interval = sleep_until_interval(1); 
-      Time::HiRes::sleep ($interval);
+      my $sleep = sleep_until_interval($interval); 
+      Time::HiRes::sleep ($sleep);
   }
   sub log_time {
       my ( $filehandle, $s0, $usec0, $text ) = @_;
@@ -234,7 +313,6 @@ where camera_name is an arbitrary name you give a Foscam camera and ip_addess na
 #+name: build-video-filename-subroutine
 #+begin_src perl
   sub build_video_filename {
-      print "DEBUG:   sub build_video_filename\n";
       my ( $camera_name, $base_dir, $type ) = @_;
       my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) =
           localtime(time);
@@ -246,7 +324,7 @@ where camera_name is an arbitrary name you give a Foscam camera and ip_addess na
 
       my $directory = make_image_dir( $base_dir, $year, $mon, $mday, $camera_name, $hour );
     
-      my $file = "$directory/${min}${sec}.$type";
+      my $file = "$directory/${year}${mon}${mday}.${hour}${min}${sec}.$camera_name.$type";
 
       return ($file);
   }
@@ -271,30 +349,18 @@ sub get_filename_from_path {
   sub sleep_until_interval {
       my $repeat_interval = shift;
       my $sleep_until_interval = 0;
-      print "DEBUG: repeat every [$repeat_interval] seconds\n";
       my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) =
           localtime(time);
       $year -= 100;
       $mon += 1;
       
       my $seconds_past_hour = $min * 60 + $sec;
-      print "SLEEP UNTIL: seconds_past_hour: $seconds_past_hour\n";
-      
+      print "$seconds_past_hour seconds past hour.";
       my $modulus = $seconds_past_hour%($repeat_interval);
-
-      print "modulus of $seconds_past_hour and $repeat_interval: $modulus\n";
+      print " modulus of $seconds_past_hour and $repeat_interval is $modulus.";
       my $sleep_until_interval = $repeat_interval - $modulus;
       print " $repeat_interval - $modulus = $sleep_until_interval\n";
 
-
-      
-      # if ( $repeat_interval == 1 ) {
-      #     $sleep_until_interval = $seconds_past_hour%$repeat_interval;
-      #     $sleep_until_interval = 60 - $sleep_until_interval;
-      # } elsif ( $repeat_interval == 60 ) {
-      #     # ONE HOUR
-      #     $sleep_until_interval = 3600 - $seconds_past_hour;
-      # }
       return $sleep_until_interval;
   }
   
@@ -324,19 +390,18 @@ sub get_filename_from_path {
 #+BEGIN_SRC perl :tangle lib/ffmpeg-foscamlib.pm :padline no :noweb yes
   use warnings;
   use strict;
-  sub make_two_pass_webm {
-      my ( $input, $output ) = @_;
-      # my $input = shift;     # %04d.jpg
-      my $quality = 'good';
-      my $video_codec = 'libvpx';
-      # Pass One
-      system("ffmpeg -y -i $input -codec:v $video_codec -quality $quality -cpu-used 0 -b:v 500k -qmin 10 -qmax 42 -maxrate 500k -bufsize 1000k -threads 4 -vf scale=-1:480 -an -pass 1 -f webm /dev/null");
-      # Pass Two
-      system("ffmpeg -y -i $input -codec:v $video_codec -quality $quality -cpu-used 0 -b:v 500k -qmin 10 -qmax 42 -maxrate 500k -bufsize 1000k -threads 4 -vf scale=-1:480 -codec:a libvorbis -b:a 128k -pass 2 -f webm $output");
+  sub make_webm {
+      my ($asf, $BASE_DIR) = @_;
+      my ($name,$path,$suffix) = fileparse($asf,".asf");
+      my $filename = '/var/camera/upload/' . $name . '.webm';
+      chdir($path) or die "Unable to chdir to asf directory: $!";
+      make_two_pass_webm( "${name}${suffix}", $BASE_DIR );
+      rename("webm.webm",$filename) or die "Unable to rename: $!";
+      return $filename;
   }
-  sub make_two_pass_webm_from_asf {
+  
+  sub make_two_pass_webm {
       my ( $input, $BASE_DIR ) = @_;
-      print "DEBUG BASE_DIR: $BASE_DIR";
       my $logfile = "$BASE_DIR/log/webm.log";
       open(my $log, ">>", $logfile) or die "unable to open $logfile: $!";
       $input =~ /^(.*?).asf$/;
@@ -348,15 +413,17 @@ sub get_filename_from_path {
       my $analyze_duration = '-analyzeduration 1000000000';
       my $timestamp = "";
       # system("ffmpeg -y -i $input webm/$basename.wav");
-      my $one_pass_command = "ffmpeg -y $analyze_duration -i $input -c:v $video_codec -pass 1 -an -f webm $timestamp $outputfile";
-      my $two_pass_command = "ffmpeg -y $analyze_duration -i $input -c:v $video_codec -pass 2 -an -f webm $timestamp $outputfile";
-      print "\n", "-" x 100, "\n=> ffmpeg pass 1: $one_pass_command\n", "-" x 100, "\n";
+      my $one_pass_command = "ffmpeg -y $analyze_duration -i $input -c:v $video_codec -pass 1 -an -f webm $timestamp $outputfile 2>/dev/null";
+      my $two_pass_command = "ffmpeg -y $analyze_duration -i $input -c:v $video_codec -pass 2 -an -f webm $timestamp $outputfile 2>/dev/null";
+      print "=> $one_pass_command\n";
       my $t0 = time;
       system($one_pass_command);
+      exit if $? != 0;
       print $log "[", foscam_localtime(), "] pass one in ", time - $t0, " seconds.\n";
-      print "\n", "-" x 100, "\n=> ffmpeg pass 2: $two_pass_command\n", "-" x 100, "\n";
+      print "=> $two_pass_command\n";
       $t0 = time;
       system($two_pass_command);
+      exit if $? != 0;
       print $log "[", foscam_localtime(), "] pass two in ", time - $t0, " seconds.\n";
       unlink("ffmpeg2pass-0.log");
       close $logfile;
@@ -383,18 +450,20 @@ Input #0, asf, from '3000.asf':
   sub pop_upload_stack {
       my $upload_stack_file = shift;
       my $temp_upload_file = "tmp_upload";
+      my $popline = 0;
       open( my $upload, "<", $upload_stack_file ) or die "Unable to open $upload_stack_file for input: $!";
-      my $popline = <$upload>;
-      open( my $tmp_upload, ">", $temp_upload_file ) or die "Unable to open $temp_upload_file for output: $!";
-      while ( my $line = <$upload> ) {
-          print $tmp_upload $line;
+      if (defined($_ = <$upload>)) {
+          chomp($popline = $_);
+          open( my $tmp_upload, ">", $temp_upload_file ) or die "Unable to open $temp_upload_file for output: $!";
+          while ( my $line = <$upload> ) {
+              print $tmp_upload $line;
+          }
+          close $tmp_upload;
+          close $upload;
+          use File::Copy;
+          copy($temp_upload_file,$upload_stack_file) or die "Unable to copy: $!";
       }
-      close $tmp_upload;
-      close $upload;
-      rename($temp_upload_file,$upload_stack_file) or die "Unable to rename $temp_upload_file to $upload_stack_file: $!";
-      $popline =~ /\[(.*?)\]\[(.*?)\]\[(.*?)\]/;
-      my ($asf, $convert_status, $upload_status ) = ($1, $2, $3);
-      return ( $asf, $convert_status, $upload_status );
+      return $popline;
   }
   1;
 #+END_SRC   
@@ -440,7 +509,11 @@ Input #0, asf, from '3000.asf':
   CAM1_PASSWORD =
   CAM1_MAC_WIRED = 00:0D:C5:D7:55:15
   CAM1_MAC_WIRELESS = 48:02:2A:43:AF:01
+  CAM1_FIRMWARE_VERSION = 11.37.2.44
+#                          11.37.2.46
+  CAM1_EMBEDDED_WEB_UI_VERSION = 2.4.10.1
 
+#                                 2.4.10.2
   # Camera 2
   CAM2_NAME = cam2
   CAM2_STATUS = active
@@ -557,7 +630,8 @@ while (<CONFIG>) {
               "camera=s" => \$camera_name,
               "ip-address=s" => \$ip_address);
   my $PIDFILE = "$BASE_DIR/run/pid.asf.$camera_name";
-  my $UPLOADFILE = "$BASE_DIR/log/$camera_name.upload";
+  my $UPLOADFILE = "$BASE_DIR/log/videofiles";
+  my $RSYNCFILE = "$BASE_DIR/log/rsyncfile";
   ### END GET OPTIONS SECTION
 #+END_SRC   
 ** Testing :noexport:
@@ -574,8 +648,8 @@ STORAGE_DIRECTORY = /var/camera
   :END:
 #+BEGIN_SRC sh :tangle ~/bin/troywill.info.sh :shebang #!/bin/bash
 #!/bin/bash
-
-export SSH_AUTH_SOCK="/tmp/ssh-ELCsfQ9RmTSO/agent.548"
+set -o errexit
+# export SSH_AUTH_SOCK="/tmp/ssh-ELCsfQ9RmTSO/agent.548"
 
 RSYNC=/usr/bin/rsync 
 SSH=/usr/bin/ssh 
@@ -583,11 +657,12 @@ KEY=/home/troy/.ssh/id_rsa
 RUSER=troy
 RHOST=shilohsystem.com
 RPATH=/var/www/html/troywill.info
-LPATH=/var/camera
+LPATH=/var/camera/upload
 LFILES="index.html latest-cam1.jpg latest-cam2.jpg latest-cam3.jpg latest-cam4.jpg"
-
+LFILES="index.html *.webm"
 cd $LPATH
-$RSYNC --archive --progress --copy-links -e "$SSH -i $KEY" $LFILES $RUSER@$RHOST:$RPATH
+# $RSYNC --archive --progress --copy-links -e "$SSH -i $KEY" $LFILES $RUSER@$RHOST:$RPATH
+$RSYNC --archive --progress $LFILES $RUSER@$RHOST:$RPATH
 #+END_SRC   
 # SSH_AUTH_SOCK="/tmp/ssh-ELCsfQ9RmTSO/agent.548"
 * * * * * $HOME/bin/troywill.info.sh >> $HOME/tmp/out 2>&1
