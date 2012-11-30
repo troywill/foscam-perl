@@ -83,8 +83,8 @@ system("vlc 'http://admin:\@cam4/videostream.cgi' &");
   <<pragma-chunk>>
   <<read-config-chunk>>
   <<get-options-chunk>>
-  my $upload_stack_file = $UPLOADFILE;
-  while ( my $asf = pop_stack_file($upload_stack_file)) {
+  my $stack_file = $UPLOADFILE;
+  while ( my $asf = pop_stack_file($stack_file)) {
     if ( -e $asf ) {
       my $webm = make_webm($asf, $BASE_DIR);
       if (defined($webm) ){
@@ -104,7 +104,7 @@ system("vlc 'http://admin:\@cam4/videostream.cgi' &");
   <<read-config-chunk>>
   <<get-options-chunk>>
   my $rsync_stack_file = $RSYNCFILE;
-  while ( my $asf = pop_stack_file($upload_stack_file)) {
+  while ( my $asf = pop_stack_file($stack_file)) {
     if ( -e $asf ) {
       my $webm = make_webm($asf, $BASE_DIR);
       if (defined($webm) ){
@@ -448,10 +448,10 @@ Input #0, asf, from '3000.asf':
   use warnings;
   use strict;
   sub pop_stack_file {
-      my $upload_stack_file = shift;
+      my $stack_file = shift;
       my $temp_upload_file = "tmp_upload";
       my $popline = 0;
-      open( my $upload, "<", $upload_stack_file ) or die "Unable to open $upload_stack_file for input: $!";
+      open( my $upload, "<", $stack_file ) or die "Unable to open $stack_file for input: $!";
       if (defined($_ = <$upload>)) {
           chomp($popline = $_);
           open( my $tmp_upload, ">", $temp_upload_file ) or die "Unable to open $temp_upload_file for output: $!";
@@ -461,7 +461,7 @@ Input #0, asf, from '3000.asf':
           close $tmp_upload;
           close $upload;
           use File::Copy;
-          copy($temp_upload_file,$upload_stack_file) or die "Unable to copy: $!";
+          copy($temp_upload_file,$stack_file) or die "Unable to copy: $!";
       }
       return $popline;
   }
