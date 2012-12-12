@@ -1,3 +1,68 @@
+* MOM
+** Make links ( bin/foscam-make-links.pl )
+#+BEGIN_SRC perl :tangle bin/foscam-make-links.pl :shebang #!/usr/bin/env perl :noweb yes
+  <<pragma-chunk>>
+  <<read-config-chunk>>
+  <<get-options-chunk>>
+  my $counter = 1;
+  my $scounter = '';
+      
+  every_second();
+  #  every_minute();
+    
+  chdir("links") or die "Unable to chdir to links: $!\n";
+  make_webm_from_jpegs('%04d.jpg', '/home/troy/webm.webm');
+      
+  sub every_second {
+      $counter = 1;
+      my @images = <*.jpg>;
+      mkdir("links");
+      chdir("links") or die "Unable to chdir to links dir";
+      foreach my $image  (@images) {
+          $scounter = sprintf("%04d", $counter);
+          symlink("../$image", "$scounter.jpg") or die "Unable to symlink";
+          $counter++;
+      }
+      chdir("..") or die "Unable to chdir ..";
+  }
+  sub every_minute {
+      $counter = 1;
+      for my $min (0..59) {
+          $min = sprintf("%02d", $min);
+          my $sec = '00';
+          $scounter = sprintf("%04d", $counter);
+          chdir("links") or die "Unable to chdir to links dir";
+          my $png = "../${min}${sec}.png";
+          if ( -e $png ) {
+              symlink($png, "$scounter.png");
+              $counter++;
+          } else {
+              print "$png does not exist\n";
+          }
+          chdir("..") or die "Unable to chdir ..";
+      }
+  }
+  
+  sub every_ten_seconds {
+      for my $min (0..59) {
+          $min = sprintf("%02d", $min);
+          for my $sec (0..5) {
+              $sec = sprintf("%02d", $sec*10);
+              $scounter = sprintf("%04d", $counter);
+              chdir("links") or die "Unable to chdir to links dir";
+              my $png = "../${min}${sec}.png";
+              if ( -e $png ) {
+                  symlink($png, "$scounter.png");
+              } else {
+                  print "$png does not exist\n";
+              }
+              chdir("..") or die "Unable to chdir ..";
+              $counter++;
+          }
+      }
+  }
+  
+#+END_SRC
 * Working programs
 ** Static images
 *** TODO The foscam-perl.pl program
@@ -17,16 +82,15 @@ where camera_name is an arbitrary name you give a Foscam camera and ip_addess na
   my $GETSTORE = 0;
   my $ANNOTATE = 1;
   use Time::HiRes qw( usleep ualarm gettimeofday tv_interval nanosleep
-                          clock_gettime clock_getres clock_nanosleep clock
-                          stat );
+                            clock_gettime clock_getres clock_nanosleep clock
+                            stat );
   
-
-# get seconds and microseconds since the epoch
+  # get seconds and microseconds since the epoch
   my ($s0, $s1, $usec0, $usec1, $t0, $t1) = 0;
-  
+    
   my $image = Image::Magick->new;
   my $index = '00';
-  
+    
   my $start_time = time;
   my $url = "http://admin:\@$ip_address/snapshot.cgi";
   $url = "http://admin:\@$ip_address/snapshot.cgi";
@@ -45,7 +109,7 @@ where camera_name is an arbitrary name you give a Foscam camera and ip_addess na
           ($s0, $usec0) = log_time( $log, $s0, $usec0, "\$image->BlobToImage" );
           if ( $ANNOTATE ) {
               print "DEBUG: \$ANNOTATE = $ANNOTATE\n";
-              $image->Annotate(x => 5, y => 20, font=>'kai.ttf', pointsize=>20, fill=>'gold', text=>$text);
+              $image->Annotate(x => 5, y => 20, font=>'kai.ttf', pointsize=>20, fill=>'white', text=>$text);
               ($s0, $usec0) = log_time( $log, $s0, $usec0, "\$image->Annotate" );
           }
           $j = $image->Write($file);
@@ -65,7 +129,7 @@ where camera_name is an arbitrary name you give a Foscam camera and ip_addess na
   sub log_time {
       my ( $filehandle, $s0, $usec0, $text ) = @_;
       my ($s1, $usec1) = gettimeofday();
-  #   my $fetch_time =  ( $s1 + $usec1/1_000_000 ) - ( $s0 + $usec0/1_000_000 );
+      #   my $fetch_time =  ( $s1 + $usec1/1_000_000 ) - ( $s0 + $usec0/1_000_000 );
       my $elapsed_time = ($s1 + $usec1 * 1e-6) - ($s0 + $usec0 * 1e-6);
       my $milliseconds = int($elapsed_time * 1000);
       print $filehandle "$text in $milliseconds ms\n";
@@ -118,7 +182,7 @@ foscam-record.pl --camera cam1 --ip-address cam1 --duration seconds
   mkdir("$BASE_DIR/log");
     
   my $url = "http://admin:\@$ip_address/videostream.asf";
-  $url = "http://admin:\@$ip_address/videostream.asf";
+  $url = "http://admin:\@$ip_address/videostream.asf?resolution=8&rate=15";
   
   my $file = build_video_filename($camera_name, $BASE_DIR, 'asf' );
   while ( my $alarm = sleep_until_interval($interval) ) {
@@ -132,6 +196,7 @@ foscam-record.pl --camera cam1 --ip-address cam1 --duration seconds
           alarm $alarm;
           $file = build_video_filename($camera_name, $BASE_DIR, 'asf' );
           print "=> getstore videostream.asf to $file\n";
+          print "VERBOSE: $url\n";
           my $return = getstore($url,$file);
           alarm 0;
       };
@@ -582,7 +647,6 @@ var msn_friend10='';
       }
     } else {
       warn "$asf does not exist\n";
-      sleep 5;
     }
   }
 #+END_SRC
@@ -617,14 +681,15 @@ The foscam-perl project is free software. This web page documents Perl programs 
 * Library
 ** foscam-perllib.pm
 #+BEGIN_SRC perl :tangle lib/foscam-perllib.pm :padline no :noweb yes
+use warnings;
+use strict;
 <<get-video-subroutine>>
-<<get-image-dir-subroutine>>
 <<make-image-dir-subroutine>>
 <<build-image-filename-subroutine>>
 <<build-video-filename-subroutine>>
-<<get-filename-from-path>>
 <<sleep-until-interval-subroutine>>
 <<foscam-localtime>>
+<<formatted-localtime>>
 <<get-active-cameras-subroutine>>
 1;
 #+END_SRC  
@@ -641,22 +706,15 @@ The foscam-perl project is free software. This web page documents Perl programs 
       };
   }
 #+END_SRC    
-*** The get_image_directory subroutine
-#+name: get-image-dir-subroutine
-#+BEGIN_SRC perl
-  sub get_image_dir {
-      my ( $base_dir, $year, $mon, $mday, $camera_name, $hour ) = @_;
-      my $directory = "$base_dir/$camera_name/$year/$mon/$mday/";
-      return $directory;
-  }
 #+END_SRC    
 *** The make_image_directory subroutine
 #+name: make-image-dir-subroutine
 #+BEGIN_SRC perl
   sub make_image_dir {
       use File::Path qw(make_path);
-      my ( $base_dir, $year, $mon, $mday, $camera_name, $hour ) = @_;
-      my $directory = get_image_dir($base_dir, $year, $mon, $mday, $camera_name, $hour);
+      my ( $base_dir, $camera_name ) = @_;
+      my ( $year, $mon, $day, $hour, $min, $sec ) = foscam_localtime();
+      my $directory = "$base_dir/$camera_name/$year/$mon/$day/";
       if ( ! -e $directory ) {
           make_path($directory, { verbose => 1 }) or die "Unable to mkdir --parent $directory";
       }
@@ -668,24 +726,16 @@ The foscam-perl project is free software. This web page documents Perl programs 
 #+begin_src perl
   sub build_image_filename {
       my ( $camera_name, $base_dir, $type ) = @_;
-      my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) =
-          localtime(time);
-      $year -= 100;
-      $mon += 1;
-      $hour = sprintf("%02d", $hour);
-      $min = sprintf("%02d", $min);
-      $sec = sprintf("%02d", $sec);
-
-      my @days = qw(Sun Mon Tue Wed Thu Fri Sat);
-    
-      my $directory = make_image_dir( $base_dir, $year, $mon, $mday, $camera_name, $hour );
-    
-      my $file = "$directory/${min}${sec}.$type";
-      my $text = "$days[$wday] $hour:$min:$sec";
+      my $directory = make_image_dir( $base_dir, $camera_name );
+      my $formatted_time = formatted_localtime();
+      my $file = "$directory/${formatted_time}.$type";
+#      my $text = "$days[$wday] $hour:$min:$sec";
+      my ($year,$mon,$day,$hour,$min,$sec,$week_day) = foscam_localtime();
+      my $text = "$hour:$min:$sec";
+      print "DEBUG: $text\n";
       return ($file, $text);
   }
 #+end_src
-
 *** The build_video_filename subroutine
 #+name: build-video-filename-subroutine
 #+begin_src perl
@@ -695,7 +745,7 @@ The foscam-perl project is free software. This web page documents Perl programs 
           localtime(time);
       $year -= 100;
       $mon += 1;
-      $day  = sprintf("%02d", $day);
+      $mday  = sprintf("%02d", $mday);
       $hour = sprintf("%02d", $hour);
       $min  = sprintf("%02d", $min);
       $sec  = sprintf("%02d", $sec);
@@ -707,20 +757,6 @@ The foscam-perl project is free software. This web page documents Perl programs 
       return ($file);
   }
 #+end_src
-*** The get_filename_from_path subroutine
-#+name: build-video-filename-subroutine
-#+BEGIN_SRC perl
-sub get_filename_from_path {
-  my ($filename, $basedir) = @_;
-  $filename =~ /^$basedir(.*?)$/;
-  $filename = $1;
-  $filename =~ m!^/(.*?)/(\d+)/(\d+)/(\d+)/(\d+)/(\d\d)(\d\d)\.(.*?)!;  # easier to read
-  my ( $camera, $year, $month, $day, $hour, $min, $sec,$extension ) = ( $1, $2, $3, $4, $5, $6, $7, $8);
-  $filename = "${year}${month}${day}.${hour}${min}${sec}";
-  return $filename;
-}
-  
-#+END_SRC
 *** The sleep_until_interval subroutine
 #+name: sleep-until-interval-subroutine
 #+begin_src perl
@@ -751,13 +787,30 @@ sub get_filename_from_path {
           localtime(time);
       $year -= 100;
       $mon += 1;
+      $mon  = sprintf("%02d", $mon);
+      $mday  = sprintf("%02d", $mday);
+      $hour = sprintf("%02d", $hour);
+      $min  = sprintf("%02d", $min);
+      $sec  = sprintf("%02d", $sec);
+      
+      return($year,$mon,$mday,$hour,$min,$sec,'Mon');
+  }
+#+END_SRC    
+*** TODO The formatted_localtime subroutine
+#+name: formatted-localtime
+#+BEGIN_SRC perl
+  sub formatted_localtime {
+      my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) =
+          localtime(time);
+      $year -= 100;
+      $mon += 1;
+      $mday = sprintf("%02d", $mday);
       $hour = sprintf("%02d", $hour);
       $min = sprintf("%02d", $min);
       $sec = sprintf("%02d", $sec);
       
-      my @days = qw(Sun Mon Tue Wed Thu Fri Sat);
-      my $formated_time = "$year-$mon-$mday $hour:$min:$sec";
-      return($formated_time);
+      my $formatted_time = "${year}${mon}${mday}.${hour}${min}${sec}";
+      return($formatted_time);
   }
 #+END_SRC    
 *** TODO The get_active_cameras subroutine
@@ -830,13 +883,18 @@ sub get_filename_from_path {
       my $basename = $1;
       # my $outputfile = "$basename.na.webm";
       my $outputfile = "webm.webm";
-      my $quality = 'good';
-      my $video_codec = 'libvpx';
+      my $video_codec = '-c:v libvpx';
+      my $quality = '-quality good';
+      my $cpu = '-cpu-used 0';
+      my $video_bitrate = '-b:v 500k';
+      my $quantization = '-qmin 10 -qmax 42';
       my $analyze_duration = '-analyzeduration 1000000000';
-      my $timestamp = "";
       # system("ffmpeg -y -i $input webm/$basename.wav");
-      my $one_pass_command = "ffmpeg -y $analyze_duration -i $input -c:v $video_codec -pass 1 -an -f webm $timestamp $outputfile 2>/dev/null";
-      my $two_pass_command = "ffmpeg -y $analyze_duration -i $input -c:v $video_codec -pass 2 -an -f webm $timestamp $outputfile 2>/dev/null";
+      my $one_pass_command = "ffmpeg -y $analyze_duration -i $input $video_codec $quality $cpu $video_bitrate $quantization -pass 1 -an -f webm $outputfile 2>/dev/null";
+  
+  # ffmpeg -i input_file.avi -codec:v libvpx -quality good -cpu-used 0 -b:v 500k -qmin 10 -qmax 42 -maxrate 500k -bufsize 1000k -threads 4 -vf scale=-1:480 -an -pass 1 -f webm /dev/null
+      
+      my $two_pass_command = "ffmpeg -y $analyze_duration -i $input $video_codec $quality $cpu $video_bitrate $quantization -pass 2 -an -f webm $outputfile 2>/dev/null";
       print "=> $one_pass_command\n";
       my $t0 = time;
       system($one_pass_command);
@@ -849,6 +907,22 @@ sub get_filename_from_path {
       print $log "[", foscam_localtime(), "] pass two in ", time - $t0, " seconds.\n";
       unlink("ffmpeg2pass-0.log");
       close $logfile;
+  }
+  sub make_webm_from_jpegs {
+      my $outputfile = "webm.webm";
+      my $quality = 'good';
+      my $video_codec = 'libvpx';
+      my $one_pass_command = "ffmpeg -y -i %04d.jpg -c:v $video_codec -pass 1 -an -f webm $outputfile 2>/dev/null";
+      my $two_pass_command = "ffmpeg -y -i %04d.jpg  -c:v $video_codec -pass 2 -an -f webm $outputfile 2>/dev/null";
+      print "=> $one_pass_command\n";
+      my $t0 = time;
+      system($one_pass_command);
+      exit if $? != 0;
+      print "=> $two_pass_command\n";
+      $t0 = time;
+      system($two_pass_command);
+      exit if $? != 0;
+      unlink("ffmpeg2pass-0.log");
   }
   1;
 #+END_SRC
@@ -1044,7 +1118,7 @@ while (<CONFIG>) {
 #+BEGIN_SRC perl
   ### BEGIN GET OPTIONS SECTION
   my $interval = 1;
-  my $duration = 1800;
+  my $duration = 86400;
   my $camera_name = 'CAM2';
   my $ip_address = '192.168.1.20';
   GetOptions( "interval=i" => \$interval,
@@ -1089,74 +1163,6 @@ $RSYNC --archive --progress $LFILES $RUSER@$RHOST:$RPATH
 # SSH_AUTH_SOCK="/tmp/ssh-ELCsfQ9RmTSO/agent.548"
 * * * * * $HOME/bin/troywill.info.sh >> $HOME/tmp/out 2>&1
 #+BEGIN_SRC sh
-#+END_SRC
-* MOM :noexport:
-** Make links ( bin/foscam-make-links.pl )
-#+BEGIN_SRC perl :tangle bin/foscam-make-links.pl :shebang #!/usr/bin/env perl :noweb yes
-  <<pragma-chunk>>
-  my $counter = 1;
-  my $scounter = '';
-      
-  every_second();
-  #  every_minute();
-    
-  make_webm('%04d.jpg', '/home/troy/webm.webm');
-      
-  sub make_webm {
-      my ( $input, $output ) = @_;
-      chdir("links") or die "Unable to chdir to links dir";
-      make_two_pass_webm( $input, $output );
-      chdir("..");
-  }
-  sub every_second {
-      $counter = 1;
-      my @images = <*.jpg>;
-      mkdir("links");
-      chdir("links") or die "Unable to chdir to links dir";
-      foreach my $image  (@images) {
-          $scounter = sprintf("%04d", $counter);
-          symlink("../$image", "$scounter.jpg") or die "Unable to symlink";
-          $counter++;
-      }
-      chdir("..") or die "Unable to chdir ..";
-  }
-  sub every_minute {
-      $counter = 1;
-      for my $min (0..59) {
-          $min = sprintf("%02d", $min);
-          my $sec = '00';
-          $scounter = sprintf("%04d", $counter);
-          chdir("links") or die "Unable to chdir to links dir";
-          my $png = "../${min}${sec}.png";
-          if ( -e $png ) {
-              symlink($png, "$scounter.png");
-              $counter++;
-          } else {
-              print "$png does not exist\n";
-          }
-          chdir("..") or die "Unable to chdir ..";
-      }
-  }
-  
-  sub every_ten_seconds {
-      for my $min (0..59) {
-          $min = sprintf("%02d", $min);
-          for my $sec (0..5) {
-              $sec = sprintf("%02d", $sec*10);
-              $scounter = sprintf("%04d", $counter);
-              chdir("links") or die "Unable to chdir to links dir";
-              my $png = "../${min}${sec}.png";
-              if ( -e $png ) {
-                  symlink($png, "$scounter.png");
-              } else {
-                  print "$png does not exist\n";
-              }
-              chdir("..") or die "Unable to chdir ..";
-              $counter++;
-          }
-      }
-  }
-  
 #+END_SRC
 * jpg-to-ppm-to-webm :noexport:
 #+BEGIN_SRC perl :tangle bin/foscam-jpg-to-ppm-to-webm :shebang #!/usr/bin/env perl :noweb yes
