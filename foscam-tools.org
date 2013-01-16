@@ -1,0 +1,19 @@
+* Play video with mplayer
+#+begin_src sh :tangle mplayer-foscam.sh :shebang #!/bin/sh
+# mplayer -cache 8192 'http://192.168.1.140/videostream.asf?user=admin&pwd='
+# vlc 'http://192.168.1.140/videostream.asf?user=admin&pwd='
+wget 'http://192.168.1.140/videostream.asf?user=admin&pwd='
+#+end_src
+* Program wget-videostream.sh
+#+begin_src sh :tangle wget-videostream.sh :shebang #!/bin/sh
+wget -O - "http://admin:ladydog@foscam/videostream.asf" | tee videostream.asf | mplayer -nocache -
+#+end_src
+* Run an action every 30 minutes
+#+begin_src perl :tangle bin/30minutes.pl :shebang #!/usr/bin/env perl
+  while (1) {
+    sleep 1;
+    my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) =
+                                                  localtime(time);
+    print time, "$min\n";
+  }
+#+end_src
