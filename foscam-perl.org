@@ -3,7 +3,7 @@
 *** TODO The foscam-perl.pl program
 **** Usage
 #+BEGIN_EXAMPLE
-foscam-snapshot.pl --camera cam1 --ip-address 192.168.15.36
+foscam-snapshot.pl --camera cam1 --hostname 192.168.15.36
 #+END_EXAMPLE
 where camera_name is an arbitrary name you give a Foscam camera and ip_addess naturally is the ip address of the camera. 
 **** What foscam-perl.pl does
@@ -27,8 +27,8 @@ where camera_name is an arbitrary name you give a Foscam camera and ip_addess na
   my $index = '00';
     
   my $start_time = time;
-  my $url = "http://admin:\@$ip_address/snapshot.cgi";
-  $url = "http://admin:\@$ip_address/snapshot.cgi";
+  my $url = "http://admin:\@$hostname/snapshot.cgi";
+  $url = "http://admin:\@$hostname/snapshot.cgi";
   my $file = build_image_filename($camera_name, $BASE_DIR, 'jpg' );
   my $logfile = "$BASE_DIR/log.$camera_name";
   open(my $log, ">", $logfile) or die "Unable to open $logfile: $!";
@@ -76,7 +76,7 @@ where camera_name is an arbitrary name you give a Foscam camera and ip_addess na
 ** Video
 *** TODO foscam-daemon.pl ( foscam-daemon.pl ) 			   :noexport:
 #+BEGIN_EXAMPLE
-foscam-daemon.pl --camera cam1 --ip-address cam1 --duration seconds
+foscam-daemon.pl --camera cam1 --hostname cam1 --duration seconds
 #+END_EXAMPLE  
 **** The main program  
 #+begin_src perl :tangle bin/foscam-daemon.pl :shebang #!/usr/bin/env perl :noweb yes
@@ -85,7 +85,7 @@ foscam-daemon.pl --camera cam1 --ip-address cam1 --duration seconds
   <<get-options-chunk>>
   mkdir("$BASE_DIR/run");
   mkdir("$BASE_DIR/log");
-  my $command = "foscam-getstore-asf.pl --camera $camera_name --ip-address $ip_address --interval $interval\&";
+  my $command = "foscam-getstore-asf.pl --camera $camera_name --hostname $hostname --interval $interval\&";
   print "DAEMON => $command\n";
   system($command);
   sleep sleep_until_interval($interval);
@@ -106,7 +106,7 @@ foscam-daemon.pl --camera cam1 --ip-address cam1 --duration seconds
 #+end_src
 *** foscam-record.pl ( foscam-record.pl )
 #+BEGIN_EXAMPLE
-foscam-record.pl --camera cam1 --ip-address cam1 --duration seconds
+foscam-record.pl --camera cam1 --hostname cam1 --duration seconds
 #+END_EXAMPLE  
 *** The main program  
 #+begin_src perl :tangle bin/foscam-record.pl :shebang #!/usr/bin/env perl :noweb yes
@@ -116,9 +116,9 @@ foscam-record.pl --camera cam1 --ip-address cam1 --duration seconds
   mkdir("$BASE_DIR/run");
   mkdir("$BASE_DIR/log");
     
-  my $url = "http://admin:\@$ip_address/videostream.asf";
+  my $url = "http://admin:\@$hostname/videostream.asf";
   # resolution = 8 => 320 x 200
-  $url = "http://admin:\@$ip_address/videostream.asf?resolution=32&rate=15";
+  $url = "http://admin:\@$hostname/videostream.asf?resolution=32&rate=15";
   
   my $file = build_video_filename($camera_name, $BASE_DIR, 'asf' );
   while ( my $alarm = sleep_until_interval($interval) ) {
@@ -152,8 +152,8 @@ foscam-getstore-asf.pl "camera_name" "ip_address"
 <<pragma-chunk>>
 <<read-config-chunk>>
 <<get-options-chunk>>
-my $url = "http://admin:\@$ip_address/videostream.asf";
-$url = "http://admin:\@$ip_address/videostream.asf";
+my $url = "http://admin:\@$hostname/videostream.asf";
+$url = "http://admin:\@$hostname/videostream.asf";
 my $file = build_video_filename($camera_name, $BASE_DIR, 'asf' );
 open(my $pid, ">", $PIDFILE) or die "Unable to open $PIDFILE: $!";
 print $pid "$$:$file\n";
@@ -746,6 +746,7 @@ use strict;
           localtime(time);
       $year -= 100;
       $mon += 1;
+      $mon  = sprintf("%02d", $mday);
       $mday  = sprintf("%02d", $mday);
       $hour = sprintf("%02d", $hour);
       $min  = sprintf("%02d", $min);
@@ -806,6 +807,7 @@ use strict;
           localtime(time);
       $year -= 100;
       $mon += 1;
+      $mon  = sprintf("%02d", $mon);
       $mday = sprintf("%02d", $mday);
       $hour = sprintf("%02d", $hour);
       $min = sprintf("%02d", $min);
@@ -1122,11 +1124,11 @@ while (<CONFIG>) {
   my $interval = 1;
   my $duration = 86400;
   my $camera_name = 'CAM2';
-  my $ip_address = '192.168.1.20';
+  my $hostname = '192.168.1.20';
   GetOptions( "interval=i" => \$interval,
               "duration=i" => \$duration,
               "camera=s" => \$camera_name,
-              "ip-address=s" => \$ip_address);
+              "hostname=s" => \$hostname);
   my $PIDFILE = "$BASE_DIR/run/pid.asf.$camera_name";
   my $UPLOADFILE = "$BASE_DIR/log/videofiles";
   my $RSYNCFILE = "$BASE_DIR/log/rsyncfile";
@@ -1357,3 +1359,4 @@ ffmpeg -i $asf -c:v copy -bsf:v mjpeg2jpeg $jpeg_dir/frame_%05d.pnm
 #+LINK_UP:   
 #+LINK_HOME: 
 #+XSLT:
+  
