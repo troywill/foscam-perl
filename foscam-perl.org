@@ -746,7 +746,7 @@ use strict;
           localtime(time);
       $year -= 100;
       $mon += 1;
-      $mon  = sprintf("%02d", $mday);
+      $mon  = sprintf("%02d", $mon);
       $mday  = sprintf("%02d", $mday);
       $hour = sprintf("%02d", $hour);
       $min  = sprintf("%02d", $min);
