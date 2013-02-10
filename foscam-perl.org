@@ -162,6 +162,76 @@ close $pid;
 my $return = getstore($url,$file);
 #+end_src
 ** Video generation tools
+*** today.pl
+#+begin_src perl :tangle bin/foscam-today.pl :shebang #!/usr/bin/env perl
+use warnings;
+use strict;
+
+my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) =
+    localtime(time);
+$year -= 100;
+$mon += 1;
+$mon  = sprintf("%02d", $mon);
+$mday  = sprintf("%02d", $mday);
+$hour = sprintf("%02d", $hour);
+$min  = sprintf("%02d", $min);
+$sec  = sprintf("%02d", $sec);
+
+open( my $review, ">", "review.txt");
+my $output_file;
+
+my @hours = qw( 00 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18 19 20 21 22 23 );
+
+my @files;
+
+foreach my $hour( @hours ) {
+    generate_webm( $hour, 0 );
+    generate_webm( $hour, 1 );
+    generate_webm( $hour, 2 );
+    generate_webm( $hour, 3 );
+    generate_webm( $hour, 4 );
+    generate_webm( $hour, 5 );
+}
+
+sub generate_webm {
+    my $hour = shift;
+    my $minute = shift;
+    my $pattern = "${year}${mon}${mday}.${hour}${minute}*.webm";
+    my @files = <${pattern}>;
+    print "=>$pattern<=\n";
+    print @files;
+    my $outfile = "today/${year}${mon}${mday}.${hour}${minute}0.webm";
+    print "\n$outfile\n";
+    my $command = "mkvmerge --output $outfile";
+    my $file = shift(@files);
+    $command .= " $file";
+    foreach my $file (@files) {
+	$command .= " +$file ";
+    }
+    print "=> $command\n";
+    system $command;
+}
+exit;
+
+# my @files = <130205.$hour*.webm>;
+
+# Morning Midnight to 1 AM
+@files = <${year}${mon}${mday}.00*.webm>;
+$output_file = "midnight-to1AM.webm";
+my $command = "mkvmerge --output $output_file";
+
+my $file = shift(@files);
+$command .= " $file";
+
+foreach my $file (@files) {
+    $command .= " +$file ";
+}
+
+print "$command\n";
+system $command;
+system("ffprobe $output_file");
+
+#+end_src   
 ** Video viewing tools
 * MOM
 ** Make links ( bin/foscam-make-links.pl )
