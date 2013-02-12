@@ -118,9 +118,7 @@ foscam-record.pl --camera cam1 --hostname cam1 --duration seconds
     
   my $url = "http://admin:\@$hostname/videostream.asf";
   # resolution = 8 => 320 x 200
-  print "DEBUG: $RATE";
-  exit;
-  $url = "http://admin:\@$hostname/videostream.asf?resolution=32&rate=15";
+  $url = "http://admin:\@$hostname/videostream.asf?resolution=32&rate=$rate";
   
   my $file = build_video_filename($camera_name, $BASE_DIR, 'asf' );
   while ( my $alarm = sleep_until_interval($interval) ) {
@@ -1199,10 +1197,12 @@ while (<CONFIG>) {
   my $duration = 86400;
   my $camera_name = 'CAM2';
   my $hostname = '192.168.1.20';
+  my $rate = 15;
   GetOptions( "interval=i" => \$interval,
               "duration=i" => \$duration,
               "camera=s" => \$camera_name,
-              "hostname=s" => \$hostname);
+              "hostname=s" => \$hostname,
+              "rate=i" => \$rate);
   my $PIDFILE = "$BASE_DIR/run/pid.asf.$camera_name";
   my $UPLOADFILE = "$BASE_DIR/log/videofiles";
   my $RSYNCFILE = "$BASE_DIR/log/rsyncfile";

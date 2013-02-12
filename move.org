@@ -1,0 +1,13 @@
+* move-right.pl
+#+begin_src perl :tangle bin/foscam-move.pl :shebang #!/usr/bin/env perl
+use warnings;
+use strict;
+use LWP::Simple;
+
+my $host = 'http://admin:@192.168.1.20:3000';
+my $right = LWP::Simple::get("$host/decoder_control.cgi?command=6&degree=1");
+print "result: $right\n";
+
+my $left = LWP::Simple::get("$host/decoder_control.cgi?command=4");
+print "result: $left\n";
+#+end_src
