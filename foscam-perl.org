@@ -108,7 +108,7 @@ foscam-daemon.pl --camera cam1 --hostname cam1 --duration seconds
 #+BEGIN_EXAMPLE
 foscam-record.pl --camera cam1 --hostname cam1 --duration seconds
 #+END_EXAMPLE  
-*** The main program  
+**** The main program  
 #+begin_src perl :tangle bin/foscam-record.pl :shebang #!/usr/bin/env perl :noweb yes
   <<pragma-chunk>>
   <<read-config-chunk>>
@@ -1173,7 +1173,9 @@ require "foscam-status.pm";
 #+NAME: read-config-chunk
 #+BEGIN_SRC perl
 ### BEGIN CONFIGURATION SECTION
-my $config_file = $ENV{HOME} . '/.foscam.conf';
+# my $config_file = $ENV{HOME} . '/.foscam.conf';
+
+my $config_file = "${Bin}/../conf/foscam.conf";
 my $BASE_DIR = "/var/camera";
 
 my %User_Preferences;
