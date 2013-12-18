@@ -24,7 +24,7 @@
 |    19 | 1/3               |
 * Working programs
 ** Static images
-*** TODO The foscam-perl.pl program
+*** TODO The foscam-snapshot.pl program
 **** Usage
 #+BEGIN_EXAMPLE
 foscam-snapshot.pl --camera cam1 --hostname 192.168.15.36
@@ -1224,7 +1224,8 @@ while (<CONFIG>) {
   my $camera_name = 'CAM2';
   my $hostname = '192.168.1.20';
   my $rate = 15;
-  GetOptions( "interval=i" => \$interval,
+  GetOptions( "mode=s" => \$mode,
+              "interval=i" => \$interval,
               "duration=i" => \$duration,
               "camera=s" => \$camera_name,
               "hostname=s" => \$hostname,
